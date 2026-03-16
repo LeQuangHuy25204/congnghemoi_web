@@ -1,0 +1,13 @@
+﻿body {
+  background: radial-gradient(circle at top, #f7f7ff 0%, #eef2f7 50%, #e9eef3 100%);
+  min-height: 100vh;
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+.app-shell {
+  color: #1c1c1c;
+}
+
+.card {
+  border-radius: 16px;
+}
