@@ -1,0 +1,122 @@
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&family=Work+Sans:wght@400;500;600&display=swap');
+
+:root {
+  --brand: #ea580c;
+  --brand-2: #ffedd5;
+  --surface: #ffffff;
+  --surface-2: #ffffff;
+  --ink: #1f2937;
+  --muted: #6b7280;
+  --border: #fed7aa;
+  --radius: 14px;
+  --shadow: 0 12px 30px rgba(234, 88, 12, 0.16);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Work Sans', system-ui, -apple-system, sans-serif;
+  color: var(--ink);
+  background: radial-gradient(900px 320px at 10% -15%, #fff4e6 0%, transparent 60%),
+    radial-gradient(900px 360px at 90% -20%, #fff1e0 0%, transparent 60%),
+    var(--surface-2);
+  min-height: 100vh;
+}
+
+h1, h2, h3, h4, h5 {
+  font-family: 'Sora', system-ui, -apple-system, sans-serif;
+  color: #c2410c;
+}
+
+.container {
+  max-width: 1120px;
+}
+
+.navbar {
+  background: var(--surface) !important;
+  box-shadow: var(--shadow);
+}
+
+.navbar-brand {
+  font-family: 'Sora', system-ui, -apple-system, sans-serif;
+  letter-spacing: 0.5px;
+}
+
+.btn-primary {
+  background: var(--brand);
+  border-color: var(--brand);
+}
+
+.btn-primary:hover {
+  background: #c2410c;
+  border-color: #c2410c;
+}
+
+.btn-outline-primary {
+  color: #c2410c;
+  border-color: #fb923c;
+}
+
+.btn-outline-primary:hover {
+  background: #fff7ed;
+  color: #c2410c;
+  border-color: #fb923c;
+}
+
+.card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.table {
+  background: var(--surface);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.shop-hero {
+  background: linear-gradient(120deg, #ffffff 0%, #fff7ed 100%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  box-shadow: var(--shadow);
+}
+
+.shop-hero .subtitle {
+  color: var(--muted);
+}
+
+.product-card .card-title {
+  min-height: 48px;
+}
+
+.badge-soft {
+  background: #ffedd5;
+  color: #9a3412;
+  font-weight: 600;
+}
+
+.admin-page h2 {
+  color: #9a3412;
+}
+
+.admin-page .card {
+  border-left: 4px solid var(--brand);
+}
+
+.form-control, .form-select {
+  border-radius: 12px;
+}
+
+.alert {
+  border-radius: 12px;
+}
+
+@media (max-width: 768px) {
+  .shop-hero {
+    padding: 16px;
+  }
+}
