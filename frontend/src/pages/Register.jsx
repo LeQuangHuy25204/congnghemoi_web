@@ -4,7 +4,7 @@ import api from '../services/api.js';
 
 export default function Register() {
   const navigate = useNavigate();
-  const [form, setForm] = useState({ name: '', email: '', password: '' });
+  const [form, setForm] = useState({ name: '', email: '', password: '', phone: '', shippingAddress: '' });
   const [alert, setAlert] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -64,6 +64,29 @@ export default function Register() {
               name="password"
               value={form.password}
               onChange={handleChange}
+              required
+            />
+          </div>
+          <div className="mb-3">
+            <label className="form-label">Phone Number</label>
+            <input
+              type="tel"
+              className="form-control"
+              name="phone"
+              value={form.phone}
+              onChange={handleChange}
+              placeholder="e.g. 0901234567"
+              required
+            />
+          </div>
+          <div className="mb-3">
+            <label className="form-label">Shipping Address</label>
+            <textarea
+              className="form-control"
+              name="shippingAddress"
+              value={form.shippingAddress}
+              onChange={handleChange}
+              rows={3}
               required
             />
           </div>

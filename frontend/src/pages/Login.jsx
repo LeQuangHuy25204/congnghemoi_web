@@ -4,7 +4,7 @@ import api, { normalizeUser, setStoredUser } from '../services/api.js';
 
 export default function Login() {
   const navigate = useNavigate();
-  const [form, setForm] = useState({ name: '', email: '', password: '' });
+  const [form, setForm] = useState({ email: '', password: '' });
   const [alert, setAlert] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -34,14 +34,14 @@ export default function Login() {
       }
 
       if (!user) {
-        user = { name: form.name, email: form.email, role: 'customer', _id: 'unknown' };
+        user = { email: form.email, role: 'customer', _id: 'unknown' };
       }
 
       setStoredUser(user);
       setAlert({ type: 'success', message: 'Login success.' });
-      navigate(user.role === 'admin' ? '/admin' : '/');
+      navigate(user.role === 'admin' ? '/admin/users' : '/');
     } catch (err) {
-      setAlert({ type: 'danger', message: 'Login failed.' });
+      setAlert({ type: 'danger', message: err.response?.data?.message || 'Login failed.' });
     } finally {
       setLoading(false);
     }
@@ -55,16 +55,6 @@ export default function Login() {
           <div className={`alert alert-${alert.type}`}>{alert.message}</div>
         )}
         <form onSubmit={handleSubmit} className="card card-body">
-          <div className="mb-3">
-            <label className="form-label">Name</label>
-            <input
-              className="form-control"
-              name="name"
-              value={form.name}
-              onChange={handleChange}
-              required
-            />
-          </div>
           <div className="mb-3">
             <label className="form-label">Email</label>
             <input

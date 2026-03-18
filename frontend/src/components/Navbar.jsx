@@ -80,7 +80,9 @@ export default function Navbar() {
           </ul>
           {user ? (
             <div className="d-flex align-items-center gap-2">
-              <span className="text-muted">{user.name || user.email} ({role})</span>
+              <Link className="text-decoration-none text-muted" to="/profile">
+                {user.name || user.email} ({role})
+              </Link>
               <button className="btn btn-outline-secondary" onClick={handleLogout}>Logout</button>
             </div>
           ) : (

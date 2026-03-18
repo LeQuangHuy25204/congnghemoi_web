@@ -14,6 +14,7 @@ import AdminUsers from './pages/AdminUsers.jsx';
 import AdminOrders from './pages/AdminOrders.jsx';
 import Orders from './pages/Orders.jsx';
 import EmployeeSupport from './pages/EmployeeSupport.jsx';
+import Profile from './pages/Profile.jsx';
 
 export default function App() {
   return (
@@ -28,6 +29,7 @@ export default function App() {
             <Route path="/cart" element={<Cart />} />
             <Route path="/checkout" element={<Checkout />} />
             <Route path="/orders" element={<Orders />} />
+            <Route path="/profile" element={<Profile />} />
           </Route>
 
           <Route element={<ProtectedRoute role="admin" />}>

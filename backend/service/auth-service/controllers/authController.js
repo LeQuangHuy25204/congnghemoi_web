@@ -1,4 +1,12 @@
-const { registerUser, loginUser, verifyUserToken } = require("../services/authService");
+const {
+  registerUser,
+  loginUser,
+  verifyUserToken,
+  listUsers,
+  updateUserByAdmin,
+  updateUserStatusByAdmin,
+  updateOwnProfile
+} = require("../services/authService");
 
 exports.register = async (req, res) => {
   try {
@@ -24,5 +32,52 @@ exports.verifyUser = async (req, res) => {
     return res.status(result.status).json(result.body);
   } catch (error) {
     return res.status(500).json({ message: "Verify token failed", error: error.message });
+  }
+};
+
+const requireAdminRole = (req, res) => {
+  if (!req.user || req.user.role !== "admin") {
+    res.status(403).json({ message: "Admin role is required" });
+    return false;
+  }
+  return true;
+};
+
+exports.getUsers = async (req, res) => {
+  if (!requireAdminRole(req, res)) return;
+  try {
+    const result = await listUsers();
+    return res.status(result.status).json(result.body);
+  } catch (error) {
+    return res.status(500).json({ message: "Get users failed", error: error.message });
+  }
+};
+
+exports.updateUser = async (req, res) => {
+  if (!requireAdminRole(req, res)) return;
+  try {
+    const result = await updateUserByAdmin(req.params.id, req.body);
+    return res.status(result.status).json(result.body);
+  } catch (error) {
+    return res.status(500).json({ message: "Update user failed", error: error.message });
+  }
+};
+
+exports.updateUserStatus = async (req, res) => {
+  if (!requireAdminRole(req, res)) return;
+  try {
+    const result = await updateUserStatusByAdmin(req.params.id, req.body?.isActive, req.user.userId);
+    return res.status(result.status).json(result.body);
+  } catch (error) {
+    return res.status(500).json({ message: "Update user status failed", error: error.message });
+  }
+};
+
+exports.updateMyProfile = async (req, res) => {
+  try {
+    const result = await updateOwnProfile(req.user.userId, req.body);
+    return res.status(result.status).json(result.body);
+  } catch (error) {
+    return res.status(500).json({ message: "Update profile failed", error: error.message });
   }
 };
