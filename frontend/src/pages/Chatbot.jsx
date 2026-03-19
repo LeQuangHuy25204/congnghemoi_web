@@ -1,9 +1,9 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import api from '../services/api.js';
 
 export default function Chatbot() {
   const [messages, setMessages] = useState([
-    { role: 'bot', message: 'Hi! Ask me anything about products or orders.' }
+    { role: 'bot', message: 'Chào bạn! Bạn cần tư vấn sản phẩm nào?' }
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -16,11 +16,18 @@ export default function Chatbot() {
     setInput('');
     setLoading(true);
     try {
-      const res = await api.post('/chatbot/messages', { message: userMessage.message });
-      const reply = res.data?.reply || res.data?.message || 'Thanks! We will get back to you.';
+      const res = await api.post('/chat', { message: userMessage.message });
+      const reply = res.data?.reply || res.data?.response || res.data?.message || 'Mình sẽ phản hồi sớm nhé.';
       setMessages((prev) => [...prev, { role: 'bot', message: reply }]);
+      const products = Array.isArray(res.data?.products) ? res.data.products : [];
+      if (products.length > 0) {
+        const list = products
+          .map((p, idx) => `${idx + 1}. ${p.name} - ${Number(p.price).toLocaleString()}đ`)
+          .join('\n');
+        setMessages((prev) => [...prev, { role: 'bot', message: list }]);
+      }
     } catch (err) {
-      setMessages((prev) => [...prev, { role: 'bot', message: 'Sorry, I cannot respond right now.' }]);
+      setMessages((prev) => [...prev, { role: 'bot', message: 'Xin lỗi, hiện tại tôi chưa thể phản hồi.' }]);
     } finally {
       setLoading(false);
     }
@@ -55,3 +62,5 @@ export default function Chatbot() {
     </div>
   );
 }
+
+

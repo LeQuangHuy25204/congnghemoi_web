@@ -21,7 +21,7 @@ const addPaidId = (id) => {
 
 export default function Checkout() {
   const navigate = useNavigate();
-  const [form, setForm] = useState({ method: 'momo', status: 'paid' });
+  const [form, setForm] = useState({ method: 'momo' });
   const [alert, setAlert] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -59,7 +59,7 @@ export default function Checkout() {
         user_id: user._id,
         amount,
         method: form.method,
-        status: form.status
+        status: 'pending'
       });
       addPaidId(order._id);
       localStorage.removeItem('lastOrder');
@@ -104,13 +104,7 @@ export default function Checkout() {
                   <option value="bank">bank</option>
                 </select>
               </div>
-              <div className="mb-3">
-                <label className="form-label">Status</label>
-                <select className="form-select" name="status" value={form.status} onChange={handleChange}>
-                  <option value="paid">paid</option>
-                  <option value="pending">pending</option>
-                </select>
-              </div>
+              <div className="text-muted mb-3">Status is set automatically by the system.</div>
               <button className="btn btn-primary" type="submit" disabled={loading}>
                 {loading ? 'Processing...' : 'Pay'}
               </button>

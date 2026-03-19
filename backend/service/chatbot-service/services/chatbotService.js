@@ -1,67 +1,118 @@
-const axios = require("axios");
-const OpenAI = require("openai");
-const ChatLog = require("../models/ChatLog");
+﻿const ChatLog = require("../models/ChatLog");
+const createProductDbConnection = require("../config/productDb");
+const productSchema = require("../models/Product");
+const { normalizeText, extractPriceVnd } = require("../utils/text");
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const productDb = createProductDbConnection();
+const Product = productDb.model("Product", productSchema, "products");
 
-const productServiceUrl = process.env.PRODUCT_SERVICE_URL || "http://localhost:5002";
-const orderServiceUrl = process.env.ORDER_SERVICE_URL || "http://localhost:5004";
-const supportServiceUrl = process.env.SUPPORT_SERVICE_URL || "http://localhost:5007";
+const replies = [
+  "Mình tìm được các sản phẩm phù hợp:",
+  "Bạn tham khảo các sản phẩm sau nhé:",
+  "Dưới đây là những lựa chọn phù hợp:"
+];
 
-const detectIntent = (message) => {
-  const text = message.toLowerCase();
+const pickReply = () => replies[Math.floor(Math.random() * replies.length)];
 
-  if (
-    text.includes("product") ||
-    text.includes("san pham") ||
-    text.includes("laptop") ||
-    text.includes("dien thoai") ||
-    text.includes("gia")
-  ) {
-    return "product";
+const isGreeting = (message) => {
+  const text = normalizeText(message);
+  const words = text.split(" ").filter(Boolean);
+  if (words.includes("chao") || words.includes("hello") || words.includes("hi")) {
+    return true;
   }
-
-  if (
-    text.includes("order") ||
-    text.includes("don hang") ||
-    text.includes("tracking") ||
-    text.includes("trang thai")
-  ) {
-    return "order";
+  for (let i = 0; i < words.length - 1; i += 1) {
+    if (words[i] === "xin" && words[i + 1] === "chao") {
+      return true;
+    }
   }
-
-  return "unknown";
+  return false;
 };
 
-const askOpenAI = async (message, context) => {
-  const apiKey = process.env.OPENAI_API_KEY || "";
-  const isPlaceholder =
-    apiKey === "" ||
-    apiKey === "your_openai_api_key" ||
-    apiKey.toLowerCase().includes("replace_me") ||
-    apiKey.toLowerCase().includes("your_");
+const removePricePhrase = (text) => {
+  const priceRegex = /(\d+(?:[.,]\d+)?)\s*(trieu|tr|cu|k|nghin|ngan|dong|vnd|vnđ)/g;
+  return text.replace(priceRegex, " ");
+};
 
-  if (isPlaceholder) {
-    return "Chatbot is running in demo mode. Set a valid OPENAI_API_KEY for real AI responses.";
+const normalizeWithDiacritics = (value) => {
+  return (value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\u00C0-\u024F\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+};
+
+const extractKeyword = (message) => {
+  const original = normalizeWithDiacritics(removePricePhrase(message));
+  const normalized = normalizeText(removePricePhrase(message));
+
+  const stopWords = new Set(
+    [
+      "tư",
+      "vấn",
+      "gợi",
+      "ý",
+      "tôi",
+      "mình",
+      "muốn",
+      "cần",
+      "tìm",
+      "mua",
+      "sản",
+      "phẩm",
+      "loại",
+      "nào",
+      "cho",
+      "đi",
+      "giúp",
+      "với",
+      "có",
+      "không",
+      "dưới",
+      "trên",
+      "khoảng",
+      "tầm",
+      "giá",
+      "mức",
+      "ngân",
+      "sách"
+    ].map((w) => normalizeText(w))
+  );
+
+  const originalTokens = original.split(" ").filter(Boolean);
+  const normalizedTokens = normalized.split(" ").filter(Boolean);
+  const keptTokens = [];
+
+  for (let i = 0; i < normalizedTokens.length; i += 1) {
+    const n = normalizedTokens[i];
+    if (!stopWords.has(n)) {
+      keptTokens.push(originalTokens[i] || n);
+    }
   }
 
-  const completion = await openai.chat.completions.create({
-    model: process.env.OPENAI_MODEL || "gpt-4o-mini",
-    messages: [
-      {
-        role: "system",
-        content:
-          "You are an e-commerce customer support assistant for phones, laptops, and electronic devices. Provide concise, clear, friendly answers based on context data."
-      },
-      {
-        role: "user",
-        content: `User message: ${message}\nContext: ${JSON.stringify(context)}`
-      }
-    ],
-    temperature: 0.4
-  });
+  const keywordOriginal = keptTokens.join(" ").trim();
+  const keywordNormalized = normalizeText(keywordOriginal);
 
-  return completion.choices?.[0]?.message?.content || "I could not generate a response at this moment.";
+  return {
+    keywordOriginal,
+    keywordNormalized
+  };
+};
+
+const searchProductsByName = async ({ keywordOriginal, keywordNormalized, price }) => {
+  const patterns = [];
+  if (keywordOriginal) {
+    patterns.push({ name: { $regex: keywordOriginal, $options: "i" } });
+  }
+  if (keywordNormalized && keywordNormalized !== keywordOriginal) {
+    patterns.push({ name: { $regex: keywordNormalized, $options: "i" } });
+  }
+
+  const query = patterns.length > 0 ? { $or: patterns } : {};
+  if (price) {
+    query.price = { $lte: price };
+  }
+
+  return Product.find(query).limit(5);
 };
 
 const handleChat = async ({ user_id, message }) => {
@@ -69,50 +120,59 @@ const handleChat = async ({ user_id, message }) => {
     return { status: 400, body: { message: "message is required" } };
   }
 
-  const intent = detectIntent(message);
-  const context = {};
-  let answer = "";
+  if (isGreeting(message)) {
+    const reply = "Chào bạn! Bạn cần tư vấn sản phẩm nào?";
+    ChatLog.create({
+      user_id: user_id || "guest",
+      message,
+      response: reply,
+      intent: "greeting"
+    }).catch(() => {});
 
-  if (intent === "product") {
-    const productResponse = await axios.get(`${productServiceUrl}/api/products`, {
-      params: { q: message }
-    });
-    context.products = productResponse.data.slice(0, 5);
-    answer = await askOpenAI(message, context);
-  } else if (intent === "order") {
-    if (!user_id) {
-      return { status: 400, body: { message: "user_id is required for order tracking" } };
-    }
-
-    const orderResponse = await axios.get(`${orderServiceUrl}/api/orders/${user_id}`);
-    context.orders = orderResponse.data;
-    answer = await askOpenAI(message, context);
-  } else {
-    if (user_id) {
-      await axios.post(`${supportServiceUrl}/api/support/ticket`, {
-        user_id,
-        title: "Chatbot escalation",
-        message,
-        status: "open"
-      });
-    }
-
-    answer = "I am not fully sure about this request. I created a support ticket so our team can assist you.";
+    return { status: 200, body: { reply, products: [] } };
   }
 
-  await ChatLog.create({
+  const { keywordOriginal, keywordNormalized } = extractKeyword(message);
+  if (!keywordOriginal && !keywordNormalized) {
+    const reply = "Bạn đang tìm sản phẩm gì?";
+    ChatLog.create({
+      user_id: user_id || "guest",
+      message,
+      response: reply,
+      intent: "unknown"
+    }).catch(() => {});
+
+    return { status: 200, body: { reply, products: [] } };
+  }
+
+  const price = extractPriceVnd(message);
+  const products = await searchProductsByName({ keywordOriginal, keywordNormalized, price });
+
+  if (!products || products.length === 0) {
+    const reply = "Hiện tại mình chưa tìm thấy sản phẩm phù hợp 😅";
+    ChatLog.create({
+      user_id: user_id || "guest",
+      message,
+      response: reply,
+      intent: "search"
+    }).catch(() => {});
+
+    return { status: 200, body: { reply, products: [] } };
+  }
+
+  const reply = pickReply();
+  ChatLog.create({
     user_id: user_id || "guest",
     message,
-    response: answer,
-    intent
-  });
+    response: reply,
+    intent: "search"
+  }).catch(() => {});
 
   return {
     status: 200,
     body: {
-      intent,
-      context,
-      response: answer
+      reply,
+      products
     }
   };
 };
@@ -120,3 +180,4 @@ const handleChat = async ({ user_id, message }) => {
 module.exports = {
   handleChat
 };
+
