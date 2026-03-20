@@ -1,15 +1,34 @@
-@import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&family=Work+Sans:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@400;600;700&display=swap');
 
 :root {
-  --brand: #ea580c;
-  --brand-2: #ffedd5;
+  --primary: #1890ff;
+  --primary-dark: #0050b3;
+  --primary-light: #e6f7ff;
+  --primary-border: #91d5ff;
+  --success: #52c41a;
+  --warning: #faad14;
+  --error: #ff4d4f;
+  --info: #1890ff;
   --surface: #ffffff;
-  --surface-2: #ffffff;
+  --surface-secondary: #f5f7fa;
+  --surface-light: #f0f2f5;
   --ink: #1f2937;
-  --muted: #6b7280;
-  --border: #fed7aa;
-  --radius: 14px;
-  --shadow: 0 12px 30px rgba(234, 88, 12, 0.16);
+  --muted: #8c8c8c;
+  --border: #d9d9d9;
+  --border-light: #f0f0f0;
+  --radius: 8px;
+  --shadow: 0 3px 6px -4px rgba(0, 0, 0, 0.12);
+  --shadow-lg: 0 6px 16px -8px rgba(0, 0, 0, 0.14);
+}
+
+html.dark-mode {
+  --surface: #1f1f1f;
+  --surface-secondary: #262626;
+  --surface-light: #2c2c2c;
+  --ink: #e6e6e6;
+  --muted: #b3b3b3;
+  --border: #434343;
+  --border-light: #303030;
 }
 
 * {
@@ -17,17 +36,17 @@
 }
 
 body {
-  font-family: 'Work Sans', system-ui, -apple-system, sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   color: var(--ink);
-  background: radial-gradient(900px 320px at 10% -15%, #fff4e6 0%, transparent 60%),
-    radial-gradient(900px 360px at 90% -20%, #fff1e0 0%, transparent 60%),
-    var(--surface-2);
+  background: var(--surface-secondary);
   min-height: 100vh;
+  transition: background-color 0.2s ease;
 }
 
 h1, h2, h3, h4, h5 {
-  font-family: 'Sora', system-ui, -apple-system, sans-serif;
-  color: #c2410c;
+  font-family: 'Poppins', system-ui, -apple-system, sans-serif;
+  color: var(--primary-dark);
+  font-weight: 700;
 }
 
 .container {
@@ -36,17 +55,86 @@ h1, h2, h3, h4, h5 {
 
 .navbar {
   background: var(--surface) !important;
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-lg);
+  border-bottom: 1px solid var(--border-light);
 }
 
 .navbar-brand {
-  font-family: 'Sora', system-ui, -apple-system, sans-serif;
+  font-family: 'Poppins', system-ui, -apple-system, sans-serif;
   letter-spacing: 0.5px;
+  color: var(--primary-dark) !important;
+  font-weight: 700;
 }
 
 .btn-primary {
-  background: var(--brand);
-  border-color: var(--brand);
+  background: var(--primary);
+  border-color: var(--primary);
+  transition: all 0.2s ease;
+}
+
+.btn-primary:hover {
+  background: var(--primary-dark);
+  border-color: var(--primary-dark);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-lg);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+}
+
+.card {
+  border: 1px solid var(--border-light);
+  box-shadow: var(--shadow);
+  transition: all 0.2s ease;
+  background: var(--surface);
+}
+
+.card:hover {
+  box-shadow: var(--shadow-lg);
+}
+
+.table {
+  background: var(--surface);
+}
+
+.table thead {
+  background: var(--primary-light);
+  border-bottom: 2px solid var(--primary-border);
+}
+
+.table thead th {
+  color: var(--primary-dark);
+  font-weight: 600;
+  border: none;
+}
+
+.table tbody tr {
+  transition: background-color 0.15s ease;
+}
+
+.table tbody tr:hover {
+  background: var(--surface-light);
+}
+
+.form-control {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--ink);
+  transition: border-color 0.2s ease;
+}
+
+.form-control:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 0.2rem rgba(24, 144, 255, 0.15);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.badge {
+  font-weight: 500;
+  padding: 4px 12px;
+  border-radius: 4px;
 }
 
 .btn-primary:hover {
@@ -118,5 +206,150 @@ h1, h2, h3, h4, h5 {
 @media (max-width: 768px) {
   .shop-hero {
     padding: 16px;
+  }
+}
+
+.chat-fab {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 0;
+  background: #ea580c;
+  color: #fff;
+  font-weight: 700;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
+  z-index: 1050;
+}
+
+.chat-widget {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  width: 340px;
+  height: 480px;
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.24);
+  overflow: hidden;
+  z-index: 1050;
+  border: 1px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-widget__header {
+  background: #4b5563;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+}
+
+.chat-widget__brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.chat-widget__dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #facc15;
+  display: inline-block;
+}
+
+.chat-widget__minimize {
+  border: 0;
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  border-radius: 8px;
+  width: 28px;
+  height: 28px;
+  line-height: 1;
+  font-size: 18px;
+}
+
+.chat-widget__messages {
+  flex: 1;
+  padding: 12px;
+  overflow-y: auto;
+  background: #f8fafc;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.chat-msg {
+  max-width: 88%;
+  border-radius: 12px;
+  padding: 8px 10px;
+}
+
+.chat-msg pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: 'Work Sans', system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+}
+
+.chat-msg--bot {
+  align-self: flex-start;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+}
+
+.chat-msg--user {
+  align-self: flex-end;
+  background: #ea580c;
+  color: #fff;
+}
+
+.chat-widget__input {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  padding: 10px;
+  border-top: 1px solid #e5e7eb;
+  background: #fff;
+}
+
+.chat-widget__input input {
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  padding: 8px 12px;
+  outline: none;
+}
+
+.chat-widget__input button {
+  border: 0;
+  border-radius: 999px;
+  background: #ea580c;
+  color: #fff;
+  padding: 8px 14px;
+  font-weight: 600;
+}
+
+.chat-widget__input button:disabled {
+  opacity: 0.55;
+}
+
+@media (max-width: 768px) {
+  .chat-widget {
+    right: 10px;
+    left: 10px;
+    width: auto;
+    height: 58vh;
+  }
+
+  .chat-fab {
+    right: 14px;
+    bottom: 14px;
   }
 }

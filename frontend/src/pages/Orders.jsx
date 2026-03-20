@@ -19,6 +19,11 @@ const getPaidIds = () => {
   }
 };
 
+const formatMoney = (value) => {
+  const amount = Number(value || 0);
+  return `${amount.toLocaleString('vi-VN')} VND`;
+};
+
 export default function Orders() {
   const navigate = useNavigate();
   const [orders, setOrders] = useState([]);
@@ -27,8 +32,8 @@ export default function Orders() {
   const [alert, setAlert] = useState(null);
   const [creating, setCreating] = useState(false);
 
-  const loadOrders = (userId) => {
-    api.get(`/orders/${userId}`)
+  const loadOrders = () => {
+    api.get('/orders/my')
       .then((res) => {
         const data = Array.isArray(res.data) ? res.data : res.data?.items || [];
         const paidIds = getPaidIds();
@@ -53,7 +58,7 @@ export default function Orders() {
       setLoading(false);
       return;
     }
-    loadOrders(user._id);
+    loadOrders();
     loadCart(user._id);
     setLoading(false);
   }, []);
@@ -95,7 +100,7 @@ export default function Orders() {
         localStorage.setItem('lastOrder', JSON.stringify(order));
       }
       setAlert({ type: 'success', message: 'Order created. You can proceed to payment.' });
-      loadOrders(user._id);
+      loadOrders();
       navigate('/checkout');
     } catch (err) {
       setAlert({ type: 'danger', message: 'Create order failed.' });
@@ -141,7 +146,7 @@ export default function Orders() {
                   <div className="fw-bold">Order #{o._id || o.id}</div>
                   <div className="text-muted">Status: {o.status || 'pending'}</div>
                 </div>
-                <div className="fw-bold">Total: {o.total_price || o.total || '—'}</div>
+                <div className="fw-bold">Total: {formatMoney(o.total_price || o.total)}</div>
               </div>
               {Array.isArray(o.items) && o.items.length > 0 && (
                 <ul className="list-group mt-3">

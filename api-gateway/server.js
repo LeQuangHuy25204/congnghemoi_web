@@ -2,6 +2,7 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const jwt = require("jsonwebtoken");
+const path = require("path");
 const { createProxyMiddleware } = require("http-proxy-middleware");
 
 const app = express();
@@ -15,23 +16,51 @@ const chatbotService = process.env.CHATBOT_SERVICE_URL || "http://localhost:5006
 const supportService = process.env.SUPPORT_SERVICE_URL || "http://localhost:5007";
 
 app.use(cors());
+app.use("/img", express.static(path.join(__dirname, "../backend/public/img")));
 
-const requireAuth = (req, res, next) => {
+const verifyTokenWithAuthService = async (authHeader) => {
+  try {
+    const response = await fetch(`${authService}/api/auth/verify`, {
+      method: "GET",
+      headers: {
+        Authorization: authHeader
+      }
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const data = await response.json();
+    const user = data?.user;
+    if (!user) return null;
+
+    return {
+      userId: user._id || user.id || user.userId || "",
+      id: user.id || user._id || "",
+      _id: user._id || user.id || "",
+      email: user.email,
+      role: user.role || "customer"
+    };
+  } catch (error) {
+    return null;
+  }
+};
+
+const requireAuth = async (req, res, next) => {
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     return res.status(401).json({ message: "Authorization token is required" });
   }
 
-  const token = authHeader.split(" ")[1];
-
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || "dev_secret");
-    req.user = decoded;
+  const verifiedUser = await verifyTokenWithAuthService(authHeader);
+  if (verifiedUser) {
+    req.user = verifiedUser;
     return next();
-  } catch (error) {
-    return res.status(401).json({ message: "Invalid or expired token" });
   }
+
+  return res.status(401).json({ message: "Invalid or expired token" });
 };
 
 const requireAdmin = (req, res, next) => {
@@ -41,12 +70,25 @@ const requireAdmin = (req, res, next) => {
   return next();
 };
 
+const resolveUserId = (user) => {
+  if (!user) return "";
+  return user.userId || user.id || user._id || user.sub || "";
+};
+
 const productAccessControl = (req, res, next) => {
   if (req.method === "GET") {
     return next();
   }
 
   return requireAuth(req, res, () => requireAdmin(req, res, next));
+};
+
+const orderAccessControl = (req, res, next) => {
+  if (req.path.startsWith("/admin")) {
+    return requireAdmin(req, res, next);
+  }
+
+  return next();
 };
 
 app.get("/health", (req, res) => {
@@ -85,10 +127,17 @@ app.use(
 app.use(
   "/api/orders",
   requireAuth,
+  orderAccessControl,
   createProxyMiddleware({
     target: orderService,
     changeOrigin: true,
-    pathRewrite: (path) => `/api/orders${path}`
+    pathRewrite: (path) => `/api/orders${path}`,
+    onProxyReq: (proxyReq, req) => {
+      if (req.user) {
+        proxyReq.setHeader("x-user-id", resolveUserId(req.user));
+        proxyReq.setHeader("x-user-role", req.user.role || "customer");
+      }
+    }
   })
 );
 
@@ -108,7 +157,13 @@ app.use(
   createProxyMiddleware({
     target: chatbotService,
     changeOrigin: true,
-    pathRewrite: (path) => `/api/chat${path}`
+    pathRewrite: (path) => `/api/chat${path}`,
+    onProxyReq: (proxyReq, req) => {
+      if (req.user) {
+        proxyReq.setHeader("x-user-id", resolveUserId(req.user));
+        proxyReq.setHeader("x-user-role", req.user.role || "customer");
+      }
+    }
   })
 );
 

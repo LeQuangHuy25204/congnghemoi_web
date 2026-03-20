@@ -2,25 +2,36 @@ const orderService = require("../services/orderService");
 
 exports.createOrder = async (req, res) => {
   try {
-    const result = await orderService.createOrder(req.body);
+    const actorUserId = req.headers["x-user-id"];
+    const result = await orderService.createOrder(req.body, actorUserId);
     return res.status(result.status).json(result.body);
   } catch (error) {
     return res.status(500).json({ message: "Create order failed", error: error.message });
   }
 };
 
-exports.getOrdersByUser = async (req, res) => {
+exports.getMyOrders = async (req, res) => {
   try {
-    const result = await orderService.getOrdersByUser(req.params.user_id);
+    const actorUserId = req.headers["x-user-id"];
+    const result = await orderService.getMyOrders(actorUserId);
     return res.status(result.status).json(result.body);
   } catch (error) {
     return res.status(500).json({ message: "Get orders failed", error: error.message });
   }
 };
 
-exports.updateOrderStatus = async (req, res) => {
+exports.getOrdersAdmin = async (req, res) => {
   try {
-    const result = await orderService.updateOrderStatus(req.params.id, req.body.status);
+    const result = await orderService.getOrdersAdmin(req.query);
+    return res.status(result.status).json(result.body);
+  } catch (error) {
+    return res.status(500).json({ message: "Get admin orders failed", error: error.message });
+  }
+};
+
+exports.updateOrderStatusAdmin = async (req, res) => {
+  try {
+    const result = await orderService.updateOrderStatusAdmin(req.params.id, req.body.status);
     return res.status(result.status).json(result.body);
   } catch (error) {
     return res.status(500).json({ message: "Update order failed", error: error.message });

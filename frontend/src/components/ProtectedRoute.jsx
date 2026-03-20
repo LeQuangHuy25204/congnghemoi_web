@@ -1,8 +1,8 @@
 import { Navigate, Outlet } from 'react-router-dom';
-import { getStoredUser } from '../services/api.js';
+import { getStoredToken, getStoredUser } from '../services/api.js';
 
 export default function ProtectedRoute({ role }) {
-  const token = localStorage.getItem('token');
+  const token = getStoredToken();
   const user = getStoredUser();
 
   if (!token) {

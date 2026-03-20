@@ -44,3 +44,36 @@ exports.deleteProduct = async (req, res) => {
     return res.status(500).json({ message: "Delete product failed", error: error.message });
   }
 };
+
+exports.decrementStock = async (req, res) => {
+  try {
+    const result = await productService.adjustStock({ items: req.body?.items, operation: "decrement" });
+    return res.status(result.status).json(result.body);
+  } catch (error) {
+    return res.status(400).json({ message: "Decrement stock failed", error: error.message });
+  }
+};
+
+exports.incrementStock = async (req, res) => {
+  try {
+    const result = await productService.adjustStock({ items: req.body?.items, operation: "increment" });
+    return res.status(result.status).json(result.body);
+  } catch (error) {
+    return res.status(400).json({ message: "Increment stock failed", error: error.message });
+  }
+};
+
+exports.uploadImage = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: "Image file is required" });
+    }
+
+    return res.status(201).json({
+      message: "Upload image success",
+      image: `/img/${req.file.filename}`
+    });
+  } catch (error) {
+    return res.status(400).json({ message: "Upload image failed", error: error.message });
+  }
+};

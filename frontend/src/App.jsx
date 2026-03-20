@@ -1,6 +1,8 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Navbar from './components/Navbar.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
+import ChatWidget from './components/ChatWidget.jsx';
+import Home from './pages/Home.jsx';
 import ProductList from './pages/ProductList.jsx';
 import ProductDetail from './pages/ProductDetail.jsx';
 import Cart from './pages/Cart.jsx';
@@ -13,6 +15,7 @@ import AdminProducts from './pages/AdminProducts.jsx';
 import AdminUsers from './pages/AdminUsers.jsx';
 import AdminOrders from './pages/AdminOrders.jsx';
 import Orders from './pages/Orders.jsx';
+import OrderHistory from './pages/OrderHistory.jsx';
 import EmployeeSupport from './pages/EmployeeSupport.jsx';
 import Profile from './pages/Profile.jsx';
 
@@ -22,13 +25,15 @@ export default function App() {
       <Navbar />
       <div className="container my-4">
         <Routes>
-          <Route path="/" element={<ProductList />} />
+          <Route path="/" element={<Home />} />
+          <Route path="/products" element={<ProductList />} />
           <Route path="/products/:id" element={<ProductDetail />} />
 
           <Route element={<ProtectedRoute />}>
             <Route path="/cart" element={<Cart />} />
             <Route path="/checkout" element={<Checkout />} />
             <Route path="/orders" element={<Orders />} />
+            <Route path="/orders/history" element={<OrderHistory />} />
             <Route path="/profile" element={<Profile />} />
           </Route>
 
@@ -48,6 +53,7 @@ export default function App() {
           <Route path="/chatbot" element={<Chatbot />} />
         </Routes>
       </div>
+      <ChatWidget />
     </BrowserRouter>
   );
 }

@@ -31,6 +31,10 @@ cd backend/api-gateway; npm install; cd ../..
 ## 3) Setup environment variables
 Copy .env.example to .env in each service folder and update values if needed.
 
+For chatbot Gemini integration, set these values in backend/service/chatbot-service/.env:
+- GEMINI_API_KEY=<your_gemini_api_key>
+- GEMINI_MODEL=gemini-2.0-flash
+
 ## 4) Run services
 Open 8 terminals and run:
 

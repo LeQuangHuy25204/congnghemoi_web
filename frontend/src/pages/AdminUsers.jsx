@@ -1,177 +1,354 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import api from '../services/api.js';
 
-export default function AdminUsers() {
+const AdminUsers = () => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [editingId, setEditingId] = useState('');
-  const [editForm, setEditForm] = useState({ name: '', phone: '', shippingAddress: '', role: 'customer' });
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    shippingAddress: '',
+    role: 'customer'
+  });
 
-  const fetchUsers = async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const res = await api.get('/auth/users');
-      setUsers(res.data?.users || []);
-    } catch (err) {
-      setError(err.response?.data?.message || 'Cannot load users list.');
-    } finally {
-      setLoading(false);
+  const roleOptions = ['customer', 'employee', 'admin'];
+
+  const getRoleLabel = (role) => {
+    switch (role) {
+      case 'admin': return '👑 Admin';
+      case 'employee': return '👔 Nhân viên';
+      case 'customer': return '👤 Khách hàng';
+      default: return role;
     }
+  };
+
+  const getStatusColor = (active) => {
+    return active ? '#52c41a' : '#ff4d4f';
+  };
+
+  const getStatusLabel = (active) => {
+    return active ? '✓ Hoạt động' : '✕ Khóa';
   };
 
   useEffect(() => {
     fetchUsers();
   }, []);
 
-  const beginEdit = (user) => {
-    setSuccess('');
-    setError('');
+  const fetchUsers = async () => {
+    try {
+      setLoading(true);
+      const response = await api.get('/auth/users');
+      setUsers(response.data?.users || []);
+      setError('');
+    } catch (err) {
+      setError('❌ Lỗi tải danh sách người dùng');
+      setUsers([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEdit = (user) => {
     setEditingId(user._id);
-    setEditForm({
+    setFormData({
       name: user.name || '',
+      email: user.email || '',
       phone: user.phone || '',
       shippingAddress: user.shippingAddress || '',
       role: user.role || 'customer'
     });
+    setShowForm(true);
   };
 
-  const cancelEdit = () => {
-    setEditingId('');
-    setEditForm({ name: '', phone: '', shippingAddress: '', role: 'customer' });
+  const handleCancel = () => {
+    setShowForm(false);
+    setEditingId(null);
+    setFormData({ name: '', email: '', phone: '', shippingAddress: '', role: 'customer' });
   };
 
-  const handleEditChange = (e) => {
-    setEditForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData({ ...formData, [name]: value });
   };
 
-  const saveEdit = async (userId) => {
-    setSuccess('');
-    setError('');
+  const handleSave = async () => {
+    if (!formData.name.trim() || !formData.email.trim()) {
+      setError('❌ Vui lòng điền tên và email');
+      return;
+    }
+
     try {
-      await api.put(`/auth/users/${userId}`, editForm);
-      setSuccess('User updated successfully.');
-      cancelEdit();
-      await fetchUsers();
+      if (editingId) {
+        await api.put(`/auth/users/${editingId}`, formData);
+        setSuccess('✓ Cập nhật người dùng thành công');
+      } else {
+        await api.post('/auth/users', formData);
+        setSuccess('✓ Thêm người dùng thành công');
+      }
+      setTimeout(() => setSuccess(''), 3000);
+      handleCancel();
+      fetchUsers();
     } catch (err) {
-      setError(err.response?.data?.message || 'Update user failed.');
+      setError('❌ ' + (err.response?.data?.message || 'Lỗi lưu người dùng'));
     }
   };
 
-  const toggleStatus = async (user) => {
-    setSuccess('');
-    setError('');
+  const handleDelete = async (id, name) => {
+    if (!window.confirm(`Xác nhận xóa người dùng "${name}"?`)) return;
+    try {
+      await api.delete(`/auth/users/${id}`);
+      setSuccess('✓ Xóa người dùng thành công');
+      setTimeout(() => setSuccess(''), 3000);
+      fetchUsers();
+    } catch (err) {
+      setError('❌ Lỗi xóa người dùng');
+    }
+  };
+
+  const handleToggleStatus = async (user) => {
     try {
       await api.patch(`/auth/users/${user._id}/status`, { isActive: !user.isActive });
-      setSuccess(`User ${user.isActive ? 'locked' : 'activated'} successfully.`);
-      await fetchUsers();
+      setSuccess(`✓ ${user.isActive ? 'Khóa' : 'Kích hoạt'} người dùng thành công`);
+      setTimeout(() => setSuccess(''), 3000);
+      fetchUsers();
     } catch (err) {
-      setError(err.response?.data?.message || 'Update status failed.');
+      setError('❌ Lỗi cập nhật trạng thái');
     }
   };
 
   return (
-    <div className="admin-page">
-      <h2 className="mb-3">User Management</h2>
-      <div className="card card-body">
-        <div className="d-flex justify-content-between align-items-center mb-3">
-          <h5 className="mb-0">All Users In Database</h5>
-          <button className="btn btn-outline-secondary btn-sm" onClick={fetchUsers} disabled={loading}>
-            {loading ? 'Refreshing...' : 'Refresh'}
-          </button>
+    <div style={{ padding: '20px' }}>
+      {/* Breadcrumb */}
+      <div style={{ fontSize: '14px', color: 'var(--muted)', marginBottom: '20px' }}>
+        <Link to="/" style={{ color: 'var(--primary)', textDecoration: 'none' }}>Trang chủ</Link> / <span>Quản lý người dùng</span>
+      </div>
+
+      {/* Alerts */}
+      {error && <div style={{ padding: '12px 16px', backgroundColor: 'rgba(255, 77, 79, 0.1)', color: '#ff4d4f', borderRadius: '4px', marginBottom: '16px', fontSize: '14px' }}>{error}</div>}
+      {success && <div style={{ padding: '12px 16px', backgroundColor: 'rgba(82, 196, 26, 0.1)', color: '#52c41a', borderRadius: '4px', marginBottom: '16px', fontSize: '14px' }}>{success}</div>}
+
+      {/* Header with Add Button */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+        <h1 style={{ margin: 0, fontSize: '24px', fontWeight: 700, color: 'var(--text)' }}>👥 Quản lý người dùng</h1>
+        <button
+          onClick={() => (showForm ? handleCancel() : setShowForm(true))}
+          style={{
+            padding: '10px 16px',
+            backgroundColor: showForm ? 'var(--muted)' : 'var(--primary)',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontWeight: 600,
+            fontSize: '13px'
+          }}
+        >
+          {showForm ? '✕ Đóng form' : '+ Thêm người dùng'}
+        </button>
+      </div>
+
+      {/* Form Modal */}
+      {showForm && (
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+          gap: '12px',
+          padding: '24px',
+          backgroundColor: 'var(--primary-light)',
+          borderRadius: '8px',
+          border: '2px solid var(--primary)',
+          marginBottom: '24px'
+        }}>
+          <input
+            type="text"
+            name="name"
+            placeholder="Họ tên"
+            value={formData.name}
+            onChange={handleInputChange}
+            style={{ padding: '10px', border: '1px solid var(--border)', borderRadius: '4px', fontSize: '13px' }}
+          />
+          <input
+            type="email"
+            name="email"
+            placeholder="Email"
+            value={formData.email}
+            onChange={handleInputChange}
+            style={{ padding: '10px', border: '1px solid var(--border)', borderRadius: '4px', fontSize: '13px' }}
+          />
+          <input
+            type="text"
+            name="phone"
+            placeholder="Số điện thoại"
+            value={formData.phone}
+            onChange={handleInputChange}
+            style={{ padding: '10px', border: '1px solid var(--border)', borderRadius: '4px', fontSize: '13px' }}
+          />
+          <select
+            name="role"
+            value={formData.role}
+            onChange={handleInputChange}
+            style={{ padding: '10px', border: '1px solid var(--border)', borderRadius: '4px', fontSize: '13px' }}
+          >
+            {roleOptions.map((r) => (
+              <option key={r} value={r}>{getRoleLabel(r)}</option>
+            ))}
+          </select>
+          <textarea
+            name="shippingAddress"
+            placeholder="Địa chỉ giao hàng"
+            value={formData.shippingAddress}
+            onChange={handleInputChange}
+            rows="2"
+            style={{ padding: '10px', border: '1px solid var(--border)', borderRadius: '4px', fontSize: '13px', gridColumn: 'span 2' }}
+          />
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              onClick={handleSave}
+              style={{
+                flex: 1,
+                padding: '10px',
+                backgroundColor: 'var(--primary)',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontWeight: 600,
+                fontSize: '13px'
+              }}
+            >
+              ✓ {editingId ? 'Cập nhật' : 'Thêm'}
+            </button>
+            <button
+              onClick={handleCancel}
+              style={{
+                flex: 1,
+                padding: '10px',
+                backgroundColor: 'var(--muted)',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontWeight: 600,
+                fontSize: '13px'
+              }}
+            >
+              Hủy
+            </button>
+          </div>
         </div>
+      )}
 
-        {error && <div className="alert alert-danger py-2">{error}</div>}
-        {success && <div className="alert alert-success py-2">{success}</div>}
-
-        <div className="table-responsive">
-          <table className="table table-hover align-middle">
+      {/* Users Table */}
+      <div style={{ overflowX: 'auto', backgroundColor: 'var(--surface)', borderRadius: '8px', border: '1px solid var(--border-light)' }}>
+        {loading ? (
+          <div style={{ padding: '40px', textAlign: 'center', color: 'var(--muted)' }}>⏳ Đang tải...</div>
+        ) : users.length === 0 ? (
+          <div style={{ padding: '40px', textAlign: 'center', color: 'var(--muted)' }}>Không có người dùng nào</div>
+        ) : (
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr>
-                <th>Name</th>
-                <th>Email</th>
-                <th>Phone</th>
-                <th>Shipping Address</th>
-                <th>Role</th>
-                <th>Status</th>
-                <th className="text-end">Actions</th>
+              <tr style={{ backgroundColor: 'var(--primary-light)', borderBottom: '2px solid var(--primary)' }}>
+                <th style={{ padding: '12px', textAlign: 'left', fontWeight: 700, color: 'var(--primary-dark)', fontSize: '13px' }}>Tên</th>
+                <th style={{ padding: '12px', textAlign: 'left', fontWeight: 700, color: 'var(--primary-dark)', fontSize: '13px' }}>Email</th>
+                <th style={{ padding: '12px', textAlign: 'left', fontWeight: 700, color: 'var(--primary-dark)', fontSize: '13px' }}>Điện thoại</th>
+                <th style={{ padding: '12px', textAlign: 'left', fontWeight: 700, color: 'var(--primary-dark)', fontSize: '13px' }}>Vai trò</th>
+                <th style={{ padding: '12px', textAlign: 'left', fontWeight: 700, color: 'var(--primary-dark)', fontSize: '13px' }}>Trạng thái</th>
+                <th style={{ padding: '12px', textAlign: 'center', fontWeight: 700, color: 'var(--primary-dark)', fontSize: '13px' }}>Hành động</th>
               </tr>
             </thead>
             <tbody>
-              {!loading && users.length === 0 && (
-                <tr>
-                  <td colSpan="7" className="text-center text-muted py-4">No users found.</td>
+              {users.map((user) => (
+                <tr
+                  key={user._id}
+                  style={{
+                    borderBottom: '1px solid var(--border-light)',
+                    transition: 'background-color 0.2s'
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--primary-light)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                >
+                  <td style={{ padding: '12px', fontSize: '13px', fontWeight: 600, color: 'var(--text)' }}>
+                    {user.name}
+                  </td>
+                  <td style={{ padding: '12px', fontSize: '13px' }}>
+                    {user.email}
+                  </td>
+                  <td style={{ padding: '12px', fontSize: '13px', color: 'var(--muted)' }}>
+                    {user.phone || '—'}
+                  </td>
+                  <td style={{ padding: '12px' }}>
+                    <span style={{ padding: '4px 8px', backgroundColor: 'rgba(24, 144, 255, 0.1)', color: 'var(--primary)', borderRadius: '4px', fontSize: '12px', fontWeight: 600 }}>
+                      {getRoleLabel(user.role)}
+                    </span>
+                  </td>
+                  <td style={{ padding: '12px' }}>
+                    <span style={{ padding: '4px 8px', backgroundColor: `rgba(${user.isActive ? '82, 196, 26' : '255, 77, 79'}, 0.1)`, color: getStatusColor(user.isActive), borderRadius: '4px', fontSize: '12px', fontWeight: 600 }}>
+                      {getStatusLabel(user.isActive)}
+                    </span>
+                  </td>
+                  <td style={{ padding: '12px', textAlign: 'center' }}>
+                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                      <button
+                        onClick={() => handleEdit(user)}
+                        style={{
+                          padding: '6px 12px',
+                          backgroundColor: 'var(--primary)',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '12px'
+                        }}
+                        title="Chỉnh sửa"
+                      >
+                        ✏️
+                      </button>
+                      <button
+                        onClick={() => handleToggleStatus(user)}
+                        style={{
+                          padding: '6px 12px',
+                          backgroundColor: user.isActive ? '#faad14' : '#52c41a',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '12px'
+                        }}
+                        title={user.isActive ? 'Khóa' : 'Kích hoạt'}
+                      >
+                        {user.isActive ? '🔓' : '🔒'}
+                      </button>
+                      <button
+                        onClick={() => handleDelete(user._id, user.name)}
+                        style={{
+                          padding: '6px 12px',
+                          backgroundColor: '#ff4d4f',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '12px'
+                        }}
+                        title="Xóa"
+                      >
+                        🗑️
+                      </button>
+                    </div>
+                  </td>
                 </tr>
-              )}
-              {users.map((user) => {
-                const isEditing = editingId === user._id;
-                return (
-                  <tr key={user._id}>
-                    <td>
-                      {isEditing ? (
-                        <input className="form-control form-control-sm" name="name" value={editForm.name} onChange={handleEditChange} />
-                      ) : (
-                        user.name || '-'
-                      )}
-                    </td>
-                    <td>{user.email}</td>
-                    <td>
-                      {isEditing ? (
-                        <input className="form-control form-control-sm" name="phone" value={editForm.phone} onChange={handleEditChange} />
-                      ) : (
-                        user.phone || '-'
-                      )}
-                    </td>
-                    <td style={{ minWidth: '220px' }}>
-                      {isEditing ? (
-                        <textarea className="form-control form-control-sm" rows="2" name="shippingAddress" value={editForm.shippingAddress} onChange={handleEditChange} />
-                      ) : (
-                        user.shippingAddress || '-'
-                      )}
-                    </td>
-                    <td>
-                      {isEditing ? (
-                        <select className="form-select form-select-sm" name="role" value={editForm.role} onChange={handleEditChange}>
-                          <option value="customer">customer</option>
-                          <option value="employee">employee</option>
-                          <option value="admin">admin</option>
-                        </select>
-                      ) : (
-                        <span className="text-capitalize">{user.role}</span>
-                      )}
-                    </td>
-                    <td>
-                      <span className={`badge ${user.isActive === false ? 'bg-danger' : 'bg-success'}`}>
-                        {user.isActive === false ? 'Locked' : 'Active'}
-                      </span>
-                    </td>
-                    <td className="text-end">
-                      {isEditing ? (
-                        <div className="d-flex justify-content-end gap-2">
-                          <button className="btn btn-sm btn-primary" onClick={() => saveEdit(user._id)}>Save</button>
-                          <button className="btn btn-sm btn-outline-secondary" onClick={cancelEdit}>Cancel</button>
-                        </div>
-                      ) : (
-                        <div className="d-flex justify-content-end gap-2">
-                          <button className="btn btn-sm btn-outline-primary" onClick={() => beginEdit(user)}>Edit</button>
-                          <button
-                            className={`btn btn-sm ${user.isActive === false ? 'btn-outline-success' : 'btn-outline-danger'}`}
-                            onClick={() => toggleStatus(user)}
-                          >
-                            {user.isActive === false ? 'Activate' : 'Lock'}
-                          </button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
+              ))}
             </tbody>
           </table>
-        </div>
+        )}
       </div>
     </div>
   );
-}
+};
+
+export default AdminUsers;
