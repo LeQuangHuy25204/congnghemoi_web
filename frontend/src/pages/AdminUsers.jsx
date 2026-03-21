@@ -12,6 +12,7 @@ const AdminUsers = () => {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
+    password: '',
     phone: '',
     shippingAddress: '',
     role: 'customer'
@@ -59,6 +60,7 @@ const AdminUsers = () => {
     setFormData({
       name: user.name || '',
       email: user.email || '',
+      password: '',
       phone: user.phone || '',
       shippingAddress: user.shippingAddress || '',
       role: user.role || 'customer'
@@ -69,7 +71,7 @@ const AdminUsers = () => {
   const handleCancel = () => {
     setShowForm(false);
     setEditingId(null);
-    setFormData({ name: '', email: '', phone: '', shippingAddress: '', role: 'customer' });
+    setFormData({ name: '', email: '', password: '', phone: '', shippingAddress: '', role: 'customer' });
   };
 
   const handleInputChange = (e) => {
@@ -83,12 +85,22 @@ const AdminUsers = () => {
       return;
     }
 
+    if (!editingId && !formData.password.trim()) {
+      setError('❌ Vui lòng nhập mật khẩu');
+      return;
+    }
+
     try {
+      const payload = { ...formData };
+      if (!payload.password) {
+        delete payload.password;
+      }
+
       if (editingId) {
-        await api.put(`/auth/users/${editingId}`, formData);
+        await api.put(`/auth/users/${editingId}`, payload);
         setSuccess('✓ Cập nhật người dùng thành công');
       } else {
-        await api.post('/auth/users', formData);
+        await api.post('/auth/users', payload);
         setSuccess('✓ Thêm người dùng thành công');
       }
       setTimeout(() => setSuccess(''), 3000);
@@ -178,6 +190,14 @@ const AdminUsers = () => {
             name="email"
             placeholder="Email"
             value={formData.email}
+            onChange={handleInputChange}
+            style={{ padding: '10px', border: '1px solid var(--border)', borderRadius: '4px', fontSize: '13px' }}
+          />
+          <input
+            type="password"
+            name="password"
+            placeholder={editingId ? 'Mật khẩu (để trống nếu không đổi)' : 'Mật khẩu'}
+            value={formData.password}
             onChange={handleInputChange}
             style={{ padding: '10px', border: '1px solid var(--border)', borderRadius: '4px', fontSize: '13px' }}
           />

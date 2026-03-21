@@ -3,9 +3,11 @@ const {
   loginUser,
   verifyUserToken,
   listUsers,
+  createUserByAdmin,
   updateUserByAdmin,
   updateUserStatusByAdmin,
-  updateOwnProfile
+  updateOwnProfile,
+  deleteUserByAdmin
 } = require("../services/authService");
 
 exports.register = async (req, res) => {
@@ -53,6 +55,16 @@ exports.getUsers = async (req, res) => {
   }
 };
 
+exports.createUser = async (req, res) => {
+  if (!requireAdminRole(req, res)) return;
+  try {
+    const result = await createUserByAdmin(req.body);
+    return res.status(result.status).json(result.body);
+  } catch (error) {
+    return res.status(500).json({ message: "Create user failed", error: error.message });
+  }
+};
+
 exports.updateUser = async (req, res) => {
   if (!requireAdminRole(req, res)) return;
   try {
@@ -70,6 +82,16 @@ exports.updateUserStatus = async (req, res) => {
     return res.status(result.status).json(result.body);
   } catch (error) {
     return res.status(500).json({ message: "Update user status failed", error: error.message });
+  }
+};
+
+exports.deleteUser = async (req, res) => {
+  if (!requireAdminRole(req, res)) return;
+  try {
+    const result = await deleteUserByAdmin(req.params.id, req.user.userId);
+    return res.status(result.status).json(result.body);
+  } catch (error) {
+    return res.status(500).json({ message: "Delete user failed", error: error.message });
   }
 };
 

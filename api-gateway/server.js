@@ -75,6 +75,20 @@ const resolveUserId = (user) => {
   return user.userId || user.id || user._id || user.sub || "";
 };
 
+const resolveUserFromToken = (authHeader) => {
+  if (!authHeader || !authHeader.startsWith("Bearer ")) return {};
+  const token = authHeader.split(" ")[1];
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || "dev_secret");
+    return {
+      userId: decoded.userId || decoded.id || decoded._id || decoded.sub || "",
+      role: decoded.role
+    };
+  } catch (error) {
+    return {};
+  }
+};
+
 const productAccessControl = (req, res, next) => {
   if (req.method === "GET") {
     return next();
@@ -133,9 +147,15 @@ app.use(
     changeOrigin: true,
     pathRewrite: (path) => `/api/orders${path}`,
     onProxyReq: (proxyReq, req) => {
-      if (req.user) {
-        proxyReq.setHeader("x-user-id", resolveUserId(req.user));
-        proxyReq.setHeader("x-user-role", req.user.role || "customer");
+      const authHeader = req.headers.authorization;
+      const tokenUser = resolveUserFromToken(authHeader);
+      const userId = resolveUserId(req.user) || tokenUser.userId || "";
+      const role = req.user?.role || tokenUser.role || "customer";
+      if (userId) {
+        proxyReq.setHeader("x-user-id", userId);
+      }
+      if (role) {
+        proxyReq.setHeader("x-user-role", role);
       }
     }
   })

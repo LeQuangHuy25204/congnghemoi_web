@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api, { getStoredUser } from '../services/api.js';
 
@@ -86,7 +86,7 @@ export default function Cart() {
       setAlert({ type: 'warning', message: 'Giỏ hàng trống' });
       return;
     }
-    navigate('/checkout');
+    navigate('/orders');
   };
 
   if (loading) {
@@ -356,7 +356,7 @@ export default function Cart() {
                     e.currentTarget.style.boxShadow = 'none';
                   }}
                 >
-                  Thanh toán
+                  Đặt hàng
                 </button>
 
                 <Link

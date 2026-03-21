@@ -8,6 +8,7 @@ const AdminOrders = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [filters, setFilters] = useState({ keyword: '', status: '', page: 1, pageSize: 10 });
+  const [meta, setMeta] = useState({ total: 0, totalPages: 1 });
 
   const statusOptions = ['pending', 'confirmed', 'shipping', 'completed', 'cancelled'];
 
@@ -41,16 +42,23 @@ const AdminOrders = () => {
       setLoading(true);
       const params = new URLSearchParams({
         page: filters.page,
-        pageSize: filters.pageSize,
-        ...(filters.keyword && { keyword: filters.keyword }),
+        limit: filters.pageSize,
+        ...(filters.keyword && { q: filters.keyword }),
         ...(filters.status && { status: filters.status })
       });
-      const response = await api.get(`/orders?${params}`);
-      setOrders(response.data?.orders || []);
+      const response = await api.get(`/orders/admin?${params}`);
+      const data = response.data || {};
+      const items = Array.isArray(data.items) ? data.items : [];
+      setOrders(items);
+      setMeta({
+        total: Number(data.total || items.length),
+        totalPages: Number(data.totalPages || 1)
+      });
       setError('');
     } catch (err) {
       setError('❌ Lỗi tải danh sách đơn hàng');
       setOrders([]);
+      setMeta({ total: 0, totalPages: 1 });
     } finally {
       setLoading(false);
     }
@@ -58,12 +66,24 @@ const AdminOrders = () => {
 
   const handleUpdateStatus = async (id, newStatus) => {
     try {
-      await api.patch(`/orders/${id}`, { status: newStatus });
+      await api.put(`/orders/admin/${id}/status`, { status: newStatus });
       setSuccess('✓ Cập nhật trạng thái thành công');
       setTimeout(() => setSuccess(''), 3000);
       fetchOrders();
     } catch (err) {
       setError('❌ Lỗi cập nhật trạng thái');
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm('Xác nhận xóa đơn hàng này?')) return;
+    try {
+      await api.delete(`/orders/admin/${id}`);
+      setSuccess('✓ Xóa đơn hàng thành công');
+      setTimeout(() => setSuccess(''), 3000);
+      fetchOrders();
+    } catch (err) {
+      setError('❌ Lỗi xóa đơn hàng');
     }
   };
 
@@ -75,8 +95,8 @@ const AdminOrders = () => {
     setFilters({ ...filters, page });
   };
 
-  const total = orders.length;
-  const totalPages = Math.ceil(total / filters.pageSize) || 1;
+  const total = meta.total || orders.length;
+  const totalPages = meta.totalPages || Math.ceil(total / filters.pageSize) || 1;
 
   return (
     <div style={{ padding: '20px' }}>
@@ -98,7 +118,7 @@ const AdminOrders = () => {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px', marginBottom: '24px', padding: '16px', backgroundColor: 'var(--surface)', borderRadius: '8px', border: '1px solid var(--border-light)' }}>
         <input
           type="text"
-          placeholder="Tìm kiếm (ID/Email)"
+          placeholder="Tìm kiếm (ID/Sản phẩm)"
           value={filters.keyword}
           onChange={(e) => setFilters({ ...filters, keyword: e.target.value })}
           style={{ padding: '8px 12px', border: '1px solid var(--border)', borderRadius: '4px', fontSize: '13px' }}
@@ -194,7 +214,7 @@ const AdminOrders = () => {
                       {o.user_id?.slice(-6) || '—'}
                     </td>
                     <td style={{ padding: '12px', fontSize: '14px', fontWeight: 600, color: 'var(--primary)' }}>
-                      {formatMoney(o.total_amount || 0)} đ
+                      {formatMoney(o.total_price || o.total || 0)} đ
                     </td>
                     <td style={{ padding: '12px' }}>
                       <span style={{ padding: '4px 8px', backgroundColor: statusColor.bg, color: statusColor.text, borderRadius: '4px', fontSize: '12px', fontWeight: 600 }}>
@@ -205,25 +225,43 @@ const AdminOrders = () => {
                       {new Date(o.createdAt).toLocaleDateString('vi-VN')}
                     </td>
                     <td style={{ padding: '12px', textAlign: 'center' }}>
-                      <select
-                        value={o.status}
-                        onChange={(e) => handleUpdateStatus(o._id || o.id, e.target.value)}
-                        style={{
-                          padding: '6px 10px',
-                          border: '1px solid var(--border)',
-                          borderRadius: '4px',
-                          fontSize: '12px',
-                          cursor: 'pointer',
-                          backgroundColor: 'white',
-                          color: 'var(--text)'
-                        }}
-                      >
-                        {statusOptions.map((s) => (
-                          <option key={s} value={s}>
-                            {getStatusColor(s).label}
-                          </option>
-                        ))}
-                      </select>
+                      <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                        <select
+                          value={o.status}
+                          onChange={(e) => handleUpdateStatus(o._id || o.id, e.target.value)}
+                          style={{
+                            padding: '6px 10px',
+                            border: '1px solid var(--border)',
+                            borderRadius: '4px',
+                            fontSize: '12px',
+                            cursor: 'pointer',
+                            backgroundColor: 'white',
+                            color: 'var(--text)'
+                          }}
+                        >
+                          {statusOptions.map((s) => (
+                            <option key={s} value={s}>
+                              {getStatusColor(s).label}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          onClick={() => handleDelete(o._id || o.id)}
+                          style={{
+                            padding: '6px 10px',
+                            backgroundColor: '#ff4d4f',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '12px',
+                            fontWeight: 600
+                          }}
+                          title="Xóa đơn hàng"
+                        >
+                          🗑️
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );

@@ -177,10 +177,66 @@ const updateOrderStatusAdmin = async (id, status) => {
   return { status: 200, body: order };
 };
 
+const getOrderByIdAdmin = async (id) => {
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return { status: 400, body: { message: "Invalid order id" } };
+  }
+
+  const order = await Order.findById(id);
+  if (!order) {
+    return { status: 404, body: { message: "Order not found" } };
+  }
+
+  return { status: 200, body: order };
+};
+
+const updateOrderAdmin = async (id, payload) => {
+  if (!payload || typeof payload !== "object") {
+    return { status: 400, body: { message: "Invalid payload" } };
+  }
+
+  if (payload.status) {
+    return updateOrderStatusAdmin(id, payload.status);
+  }
+
+  return { status: 400, body: { message: "Only status update is supported" } };
+};
+
+const deleteOrderAdmin = async (id) => {
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return { status: 400, body: { message: "Invalid order id" } };
+  }
+
+  const existing = await Order.findById(id);
+  if (!existing) {
+    return { status: 404, body: { message: "Order not found" } };
+  }
+
+  const currentStatus = normalizeStatus(existing.status);
+  if (currentStatus !== "cancelled" && currentStatus !== "completed") {
+    const stockItems = extractStockItems(existing.items);
+    if (stockItems.length > 0) {
+      try {
+        await callStockApi("increment", stockItems);
+      } catch (error) {
+        const errorStatus = error?.response?.status || 400;
+        const message = error?.response?.data?.message || "Restore stock failed";
+        return { status: errorStatus, body: { message } };
+      }
+    }
+  }
+
+  await Order.findByIdAndDelete(id);
+  return { status: 200, body: { message: "Order deleted successfully" } };
+};
+
 module.exports = {
   createOrder,
   getMyOrders,
   getOrdersAdmin,
   updateOrderStatusAdmin,
+  getOrderByIdAdmin,
+  updateOrderAdmin,
+  deleteOrderAdmin,
   ALLOWED_STATUSES
 };

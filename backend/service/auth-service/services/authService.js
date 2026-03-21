@@ -38,6 +38,44 @@ const registerUser = async ({ name, email, password, phone, shippingAddress, rol
   };
 };
 
+const createUserByAdmin = async ({ name, email, password, phone, shippingAddress, role, isActive }) => {
+  if (!name || !email || !password || !phone || !shippingAddress) {
+    return { status: 400, body: { message: "name, email, password, phone, shippingAddress are required" } };
+  }
+
+  const existed = await User.findOne({ email });
+  if (existed) {
+    return { status: 409, body: { message: "Email already exists" } };
+  }
+
+  const hashedPassword = await bcrypt.hash(password, 10);
+  const user = await User.create({
+    name,
+    email,
+    password: hashedPassword,
+    phone,
+    shippingAddress,
+    role: role || "customer",
+    isActive: typeof isActive === "boolean" ? isActive : true
+  });
+
+  return {
+    status: 201,
+    body: {
+      message: "User created successfully",
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        shippingAddress: user.shippingAddress,
+        role: user.role,
+        isActive: user.isActive
+      }
+    }
+  };
+};
+
 const loginUser = async ({ email, password }) => {
   if (!email || !password) {
     return { status: 400, body: { message: "email and password are required" } };
@@ -110,6 +148,7 @@ const listUsers = async () => {
 const updateUserByAdmin = async (userId, payload) => {
   const allowed = {
     name: payload.name,
+    email: payload.email,
     phone: payload.phone,
     shippingAddress: payload.shippingAddress,
     role: payload.role
@@ -121,8 +160,19 @@ const updateUserByAdmin = async (userId, payload) => {
     }
   });
 
+  if (payload.password) {
+    allowed.password = await bcrypt.hash(payload.password, 10);
+  }
+
   if (Object.keys(allowed).length === 0) {
     return { status: 400, body: { message: "No valid fields to update" } };
+  }
+
+  if (allowed.email) {
+    const existed = await User.findOne({ email: allowed.email, _id: { $ne: userId } });
+    if (existed) {
+      return { status: 409, body: { message: "Email already exists" } };
+    }
   }
 
   const user = await User.findByIdAndUpdate(userId, allowed, { new: true, runValidators: true }).select("-password");
@@ -134,6 +184,25 @@ const updateUserByAdmin = async (userId, payload) => {
     status: 200,
     body: {
       message: "User updated successfully",
+      user
+    }
+  };
+};
+
+const deleteUserByAdmin = async (userId, currentAdminId) => {
+  if (userId === currentAdminId) {
+    return { status: 400, body: { message: "You cannot delete your own account" } };
+  }
+
+  const user = await User.findByIdAndDelete(userId).select("-password");
+  if (!user) {
+    return { status: 404, body: { message: "User not found" } };
+  }
+
+  return {
+    status: 200,
+    body: {
+      message: "User deleted successfully",
       user
     }
   };
@@ -206,7 +275,9 @@ module.exports = {
   loginUser,
   verifyUserToken,
   listUsers,
+  createUserByAdmin,
   updateUserByAdmin,
   updateUserStatusByAdmin,
-  updateOwnProfile
+  updateOwnProfile,
+  deleteUserByAdmin
 };

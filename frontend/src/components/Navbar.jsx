@@ -78,7 +78,7 @@ export default function Navbar() {
               </Link>
             )}
 
-            {role !== 'employee' && (
+            {role !== 'employee' && role !== 'admin' && (
               <Link to="/products" style={navLinkStyle}
                 onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--primary-light)'; e.currentTarget.style.color = 'var(--primary)'; }}
                 onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = 'var(--ink)'; }}>
@@ -116,7 +116,7 @@ export default function Navbar() {
                 <Link to="/admin/products" style={navLinkStyle}
                   onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--primary-light)'; e.currentTarget.style.color = 'var(--primary)'; }}
                   onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = 'var(--ink)'; }}>
-                  📦 Sản phẩm
+                  📦 Quản lý sản phẩm
                 </Link>
                 <Link to="/admin/users" style={navLinkStyle}
                   onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--primary-light)'; e.currentTarget.style.color = 'var(--primary)'; }}
