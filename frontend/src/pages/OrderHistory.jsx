@@ -334,7 +334,7 @@ export default function OrderHistory() {
                       <div style={{ fontSize: '12px', color: '#666', background: '#fafafa', padding: '8px', borderRadius: '4px' }}>
                         {order.items.slice(0, 2).map((item, idx) => (
                           <div key={idx} style={{ marginBottom: idx < 1 ? '4px' : 0 }}>
-                            {item.name} x{item.quantity}
+                            {item.product_name || item.name || 'Sản phẩm'} x{item.quantity}
                           </div>
                         ))}
                         {order.items.length > 2 && (

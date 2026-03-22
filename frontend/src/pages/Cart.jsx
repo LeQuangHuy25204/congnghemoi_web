@@ -20,8 +20,11 @@ const formatPrice = (price) => {
 export default function Cart() {
   const navigate = useNavigate();
   const [items, setItems] = useState([]);
+  const [selectedIds, setSelectedIds] = useState([]);
   const [loading, setLoading] = useState(true);
   const [alert, setAlert] = useState(null);
+
+  const getItemId = (item) => item.product_id || item.productId || item.id || item._id;
 
   const loadCart = () => {
     const user = getStoredUser();
@@ -33,10 +36,13 @@ export default function Cart() {
     setLoading(true);
     api.get(`/cart/${user._id}`)
       .then((res) => {
-        setItems(extractItems(res.data));
+        const cartItems = extractItems(res.data);
+        setItems(cartItems);
+        setSelectedIds(cartItems.map((item) => getItemId(item)).filter(Boolean));
       })
       .catch(() => {
         setItems([]);
+        setSelectedIds([]);
       })
       .finally(() => setLoading(false));
   };
@@ -66,6 +72,7 @@ export default function Cart() {
     const user = getStoredUser();
     try {
       await api.delete('/cart/remove', { data: { user_id: user._id, product_id: productId } });
+      setSelectedIds((prev) => prev.filter((id) => id !== productId));
       setAlert({ type: 'success', message: '✓ Xóa khỏi giỏ hàng thành công' });
       loadCart();
     } catch (err) {
@@ -73,20 +80,56 @@ export default function Cart() {
     }
   };
 
+  const selectedItems = useMemo(() => {
+    return items.filter((item) => selectedIds.includes(getItemId(item)));
+  }, [items, selectedIds]);
+
+  const allSelected = items.length > 0 && selectedItems.length === items.length;
+
+  const toggleSelectAll = (checked) => {
+    if (checked) {
+      setSelectedIds(items.map((item) => getItemId(item)).filter(Boolean));
+      return;
+    }
+    setSelectedIds([]);
+  };
+
+  const toggleSelectItem = (itemId, checked) => {
+    if (!itemId) return;
+    if (checked) {
+      setSelectedIds((prev) => (prev.includes(itemId) ? prev : [...prev, itemId]));
+      return;
+    }
+    setSelectedIds((prev) => prev.filter((id) => id !== itemId));
+  };
+
   const total = useMemo(() => {
-    return items.reduce((sum, i) => {
+    return selectedItems.reduce((sum, i) => {
       const price = i.price || 0;
       const qty = i.quantity || 1;
       return sum + price * qty;
     }, 0);
-  }, [items]);
+  }, [selectedItems]);
 
   const handleCheckout = () => {
-    if (items.length === 0) {
-      setAlert({ type: 'warning', message: 'Giỏ hàng trống' });
+    if (items.length === 0 || selectedItems.length === 0) {
+      setAlert({ type: 'warning', message: 'Vui lòng chọn ít nhất 1 sản phẩm để mua' });
       return;
     }
-    navigate('/orders');
+
+    const draft = {
+      items: selectedItems.map((item) => ({
+        product_id: getItemId(item),
+        product_name: item.product_name || item.productName || 'Sản phẩm',
+        variant: item.variant || item.classification || 'Mặc định',
+        price: Number(item.price || 0),
+        quantity: Number(item.quantity || 1)
+      })),
+      createdAt: new Date().toISOString()
+    };
+
+    localStorage.setItem('checkoutDraft', JSON.stringify(draft));
+    navigate('/checkout');
   };
 
   if (loading) {
@@ -209,6 +252,14 @@ export default function Cart() {
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ backgroundColor: 'var(--primary-light)', borderBottom: '2px solid var(--primary-border)' }}>
+                      <th style={{ padding: '12px 10px', textAlign: 'center', width: '5%' }}>
+                        <input
+                          type="checkbox"
+                          checked={allSelected}
+                          onChange={(e) => toggleSelectAll(e.target.checked)}
+                          style={{ cursor: 'pointer' }}
+                        />
+                      </th>
                       <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, color: 'var(--primary-dark)', width: '40%' }}>
                         Sản phẩm
                       </th>
@@ -228,8 +279,9 @@ export default function Cart() {
                   </thead>
                   <tbody>
                     {items.map((i, idx) => {
-                      const id = i.product_id || i.productId || i.id || i._id;
+                      const id = getItemId(i);
                       const name = i.product_name || i.productName || 'Sản phẩm';
+                      const variant = i.variant || i.classification || 'Mặc định';
                       const price = i.price || 0;
                       const qty = i.quantity || 1;
                       const subtotal = price * qty;
@@ -244,8 +296,19 @@ export default function Cart() {
                           onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--surface-light)')}
                           onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
                         >
+                          <td style={{ padding: '16px 10px', textAlign: 'center' }}>
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.includes(id)}
+                              onChange={(e) => toggleSelectItem(id, e.target.checked)}
+                              style={{ cursor: 'pointer' }}
+                            />
+                          </td>
                           <td style={{ padding: '16px', fontSize: '14px', fontWeight: 500, color: 'var(--primary-dark)' }}>
-                            {name}
+                            <div>{name}</div>
+                            <div style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '4px' }}>
+                              Phân loại: {variant}
+                            </div>
                           </td>
                           <td style={{ padding: '16px', textAlign: 'center', color: 'var(--ink)' }}>
                             {formatPrice(price)}
@@ -311,8 +374,8 @@ export default function Cart() {
                 </h3>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px', paddingBottom: '12px', borderBottom: '1px solid var(--border-light)' }}>
-                  <span style={{ color: 'var(--muted)' }}>Tổng sản phẩm:</span>
-                  <span style={{ fontWeight: 600, color: 'var(--ink)' }}>{items.length}</span>
+                  <span style={{ color: 'var(--muted)' }}>Đã chọn:</span>
+                  <span style={{ fontWeight: 600, color: 'var(--ink)' }}>{selectedItems.length}/{items.length}</span>
                 </div>
 
                 <div

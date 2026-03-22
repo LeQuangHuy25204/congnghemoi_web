@@ -37,19 +37,51 @@ const ORDER_INTENT_KEYWORDS = [
 ];
 
 const STATUS_LABELS = {
-  pending: "dang cho xac nhan",
-  confirmed: "da xac nhan",
-  shipping: "dang giao",
-  completed: "da hoan thanh",
-  cancelled: "da huy"
+  pending: "Đang chờ xác nhận",
+  confirmed: "Đã xác nhận",
+  shipping: "Đang giao",
+  completed: "Đã hoàn thành",
+  cancelled: "Đã hủy"
 };
 
 const formatPrice = (value) => {
-  if (typeof value !== "number") return "N/A";
+  if (typeof value !== "number" || Number.isNaN(value)) return "N/A";
   return `${value.toLocaleString("vi-VN")} VND`;
 };
 
 const getOrderStatusLabel = (status) => STATUS_LABELS[status] || status || "khong ro";
+
+const formatOrderItems = (items) => {
+  if (!Array.isArray(items) || items.length === 0) {
+    return "(chưa có sản phẩm)";
+  }
+
+  return items
+    .slice(0, 5)
+    .map((item, index) => {
+      const name = item?.product_name || item?.name || "Sản phẩm";
+      const quantity = Number(item?.quantity || 0);
+      const price = Number(item?.price || 0);
+      return `   ${index + 1}) ${name} | SL: ${quantity} | Giá: ${formatPrice(price)}`;
+    })
+    .join("\n");
+};
+
+const formatSingleOrderBlock = (order, index) => {
+  const orderId = order?._id || order?.id || "N/A";
+  const status = getOrderStatusLabel(order?.status);
+  const total = formatPrice(Number(order?.total_price || order?.total || 0));
+  const productLines = formatOrderItems(order?.items);
+
+  return [
+    `📦 Đơn ${index + 1}`,
+    `- Mã đơn: ${orderId}`,
+    `- Trạng thái: ${status}`,
+    `- Sản phẩm:`,
+    productLines,
+    `- Tổng tiền: ${total}`
+  ].join("\n");
+};
 
 const isOrderLookupIntent = (message) => {
   const text = normalizeText(message);
@@ -234,14 +266,8 @@ const buildOrderFallbackReply = (orders, queriedOrderCode) => {
     return "Bạn chưa có đơn hàng nào. Bạn muốn mình gợi ý sản phẩm phù hợp để đặt đơn mới không?";
   }
 
-  const lines = orders.slice(0, 3).map((order, index) => {
-    const orderId = order?._id || order?.id || "N/A";
-    const status = getOrderStatusLabel(order?.status);
-    const total = formatPrice(order?.total_price || order?.total || 0);
-    return `${index + 1}. Đơn ${orderId}: ${status}, tổng ${total}`;
-  });
-
-  return `Mình đã tìm thấy ${orders.length} đơn của bạn.\n${lines.join("\n")}`;
+  const blocks = orders.slice(0, 3).map((order, index) => formatSingleOrderBlock(order, index));
+  return `Mình đã tìm thấy ${orders.length} đơn của bạn:\n\n${blocks.join("\n\n----------------\n\n")}`;
 };
 
 const isGreeting = (message) => {
@@ -389,13 +415,7 @@ const handleChat = async ({ user_id, actor_user_id, message }) => {
         })
       : allOrders;
 
-    const fallbackReply = buildOrderFallbackReply(orders, queriedOrderCode);
-    const reply =
-      (await generateGeminiOrderReply({
-        message,
-        orders,
-        queriedOrderCode
-      })) || fallbackReply;
+    const reply = buildOrderFallbackReply(orders, queriedOrderCode);
 
     ChatLog.create({
       user_id: effectiveUserId,
