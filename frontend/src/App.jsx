@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Navbar from './components/Navbar.jsx';
+import Footer from './components/Footer.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import ChatWidget from './components/ChatWidget.jsx';
 import Home from './pages/Home.jsx';
@@ -22,36 +23,41 @@ import Profile from './pages/Profile.jsx';
 export default function App() {
   return (
     <BrowserRouter>
-      <Navbar />
-      <div className="container my-4">
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/products" element={<ProductList />} />
-          <Route path="/products/:id" element={<ProductDetail />} />
+      <div className="app-shell">
+        <Navbar />
+        <main className="app-main">
+          <div className="container my-4">
+            <Routes>
+              <Route path="/" element={<Home />} />
+              <Route path="/products" element={<ProductList />} />
+              <Route path="/products/:id" element={<ProductDetail />} />
 
-          <Route element={<ProtectedRoute />}>
-            <Route path="/cart" element={<Cart />} />
-            <Route path="/checkout" element={<Checkout />} />
-            <Route path="/orders" element={<Orders />} />
-            <Route path="/orders/history" element={<OrderHistory />} />
-            <Route path="/profile" element={<Profile />} />
-          </Route>
+              <Route element={<ProtectedRoute />}>
+                <Route path="/cart" element={<Cart />} />
+                <Route path="/checkout" element={<Checkout />} />
+                <Route path="/orders" element={<Orders />} />
+                <Route path="/orders/history" element={<OrderHistory />} />
+                <Route path="/profile" element={<Profile />} />
+              </Route>
 
-          <Route element={<ProtectedRoute role="admin" />}>
-            <Route path="/admin/products" element={<AdminProducts />} />
-            <Route path="/admin/users" element={<AdminUsers />} />
-            <Route path="/admin/orders" element={<AdminOrders />} />
-          </Route>
+              <Route element={<ProtectedRoute role="admin" />}>
+                <Route path="/admin/products" element={<AdminProducts />} />
+                <Route path="/admin/users" element={<AdminUsers />} />
+                <Route path="/admin/orders" element={<AdminOrders />} />
+              </Route>
 
-          <Route element={<ProtectedRoute role="employee" />}>
-            <Route path="/employee/support" element={<EmployeeSupport />} />
-          </Route>
+              <Route element={<ProtectedRoute role="employee" />}>
+                <Route path="/employee/support" element={<EmployeeSupport />} />
+              </Route>
 
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/support" element={<Support />} />
-          <Route path="/chatbot" element={<Chatbot />} />
-        </Routes>
+              <Route path="/login" element={<Login />} />
+              <Route path="/register" element={<Register />} />
+              <Route path="/support" element={<Support />} />
+              <Route path="/chatbot" element={<Chatbot />} />
+            </Routes>
+          </div>
+        </main>
+        <Footer />
       </div>
       <ChatWidget />
     </BrowserRouter>

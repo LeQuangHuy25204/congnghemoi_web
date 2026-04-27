@@ -131,7 +131,7 @@ export default function Home() {
       <WelcomeHero
         eyebrow="Chào mừng"
         title="Không gian mua sắm công nghệ gọn gàng, hiện đại và dễ chọn hơn."
-        description="ShopHub sắp xếp lại sản phẩm theo từng nhóm rõ ràng để bạn xem nhanh mẫu nổi bật, so sánh thương hiệu và tìm đúng món cần mua mà không bị rối."
+        description=""
         primaryAction={{ to: '/products', label: 'Xem toàn bộ sản phẩm' }}
         secondaryAction={{ to: '/products', label: 'Khám phá ngay' }}
         theme="light"

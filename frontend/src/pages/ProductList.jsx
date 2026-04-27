@@ -475,7 +475,7 @@ export default function ProductList() {
       <WelcomeHero
         eyebrow="Sản phẩm"
         title="Chào mừng bạn đến khu trưng bày sản phẩm của ShopHub."
-        description="Mỗi danh mục được gom thành một cụm riêng để bạn xem nhanh mẫu cùng loại, lọc theo thương hiệu và chọn sản phẩm phù hợp chỉ trong vài lần chạm."
+        description=""
         primaryAction={{ to: '/products', label: 'Xem sản phẩm mới' }}
         secondaryAction={{ to: '/', label: 'Về trang chủ' }}
         theme="light"
@@ -513,11 +513,11 @@ export default function ProductList() {
 
       <section
         style={{
-          background: '#ffffff',
+          background: 'linear-gradient(135deg, #f97316 0%, #fdba74 100%)',
           borderRadius: '24px',
           padding: '22px',
-          border: '1px solid rgba(148,163,184,0.18)',
-          boxShadow: '0 20px 40px rgba(15, 23, 42, 0.06)'
+          border: '1px solid rgba(234,88,12,0.2)',
+          boxShadow: '0 24px 48px rgba(234, 88, 12, 0.18)'
         }}
       >
         <div
@@ -569,7 +569,13 @@ export default function ProductList() {
           </select>
 
           <div style={{ display: 'flex', gap: '10px', justifyContent: 'end', flexWrap: 'wrap' }}>
-            <button className="btn btn-primary" onClick={handleSearch} style={{ minWidth: '108px' }}>
+            <button
+              className="btn btn-primary"
+              onClick={handleSearch}
+              style={{
+                minWidth: '108px'
+              }}
+            >
               Tìm kiếm
             </button>
             <button
@@ -577,9 +583,9 @@ export default function ProductList() {
               onClick={handleReset}
               style={{
                 minWidth: '108px',
-                border: '1px solid #cbd5e1',
+                border: '1px solid rgba(255,255,255,0.55)',
                 background: '#fff',
-                color: '#0f172a'
+                color: '#9a3412'
               }}
             >
               Đặt lại
@@ -608,9 +614,9 @@ export default function ProductList() {
                 style={{
                   padding: '9px 14px',
                   borderRadius: '999px',
-                  border: activeCategory === category ? '1px solid #f97316' : '1px solid #e2e8f0',
-                  background: activeCategory === category ? '#fff7ed' : '#fff',
-                  color: activeCategory === category ? '#c2410c' : '#334155',
+                  border: activeCategory === category ? '1px solid #ffffff' : '1px solid rgba(255,255,255,0.55)',
+                  background: activeCategory === category ? '#fff7ed' : 'rgba(255,255,255,0.92)',
+                  color: activeCategory === category ? '#c2410c' : '#7c2d12',
                   fontSize: '13px',
                   fontWeight: 700,
                   cursor: 'pointer'
@@ -629,9 +635,9 @@ export default function ProductList() {
                 style={{
                   padding: '9px 14px',
                   borderRadius: '999px',
-                  border: viewMode === mode ? '1px solid #f97316' : '1px solid #e2e8f0',
-                  background: viewMode === mode ? '#fff7ed' : '#fff',
-                  color: viewMode === mode ? '#c2410c' : '#475569',
+                  border: viewMode === mode ? '1px solid #ffffff' : '1px solid rgba(255,255,255,0.55)',
+                  background: viewMode === mode ? '#fff7ed' : 'rgba(255,255,255,0.92)',
+                  color: viewMode === mode ? '#c2410c' : '#7c2d12',
                   fontWeight: 700,
                   cursor: 'pointer'
                 }}

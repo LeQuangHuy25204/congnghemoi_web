@@ -83,10 +83,10 @@ export default function OrderHistory() {
           <div className="d-flex justify-content-between align-items-center mb-4">
             <div>
               <h1 style={{ fontSize: '24px', fontWeight: 600, margin: 0, color: '#000' }}>
-                Lich su don hang
+                Lịch sử đơn hàng
               </h1>
               <p style={{ color: '#999', fontSize: '14px', margin: '4px 0 0 0' }}>
-                Quan ly va theo doi cac don hang cua ban
+                Quản lý và theo dõi các đơn hàng của bạn
               </p>
             </div>
             <button

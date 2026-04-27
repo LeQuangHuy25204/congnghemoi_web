@@ -103,17 +103,15 @@ export default function Navbar() {
   };
 
   return (
-    <nav
-      style={{
-        position: 'sticky',
-        top: 0,
-        zIndex: 100,
-        background: 'rgba(255,255,255,0.88)',
-        backdropFilter: 'blur(14px)',
-        borderBottom: '1px solid rgba(255,255,255,0.8)',
-        boxShadow: '0 12px 28px rgba(15, 23, 42, 0.07)'
-      }}
-    >
+    <nav className="site-nav">
+      <div className="site-nav__promo">
+        <div className="container-lg site-nav__promo-inner">
+          <span>Giá tốt mỗi ngày</span>
+          <span>Giao nhanh toàn quốc</span>
+          <span>Hỗ trợ sau bán hàng</span>
+        </div>
+      </div>
+
       <div className="container-lg" style={{ padding: '0 16px' }}>
         <div
           style={{
@@ -130,11 +128,15 @@ export default function Navbar() {
               display: 'inline-flex',
               alignItems: 'center',
               gap: '10px',
+              padding: '10px 16px',
+              borderRadius: '999px',
               textDecoration: 'none',
-              color: 'var(--ink)',
+              color: '#fff',
               fontFamily: 'Sora, system-ui, sans-serif',
               fontSize: '24px',
-              fontWeight: 800
+              fontWeight: 800,
+              background: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)',
+              boxShadow: '0 14px 28px rgba(234, 88, 12, 0.22)'
             }}
           >
             ShopHub

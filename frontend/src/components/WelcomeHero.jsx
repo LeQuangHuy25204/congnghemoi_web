@@ -66,6 +66,7 @@ export default function WelcomeHero({
           </span>
 
           <h1
+            className="welcome-hero__title"
             style={{
               margin: '18px 0 14px',
               fontSize: 'clamp(30px, 5vw, 52px)',
@@ -76,17 +77,19 @@ export default function WelcomeHero({
             {title}
           </h1>
 
-          <p
-            style={{
-              maxWidth: '640px',
-              margin: 0,
-              color: isDark ? 'rgba(248,250,252,0.82)' : '#475569',
-              fontSize: '16px',
-              lineHeight: 1.8
-            }}
-          >
-            {description}
-          </p>
+          {description ? (
+            <p
+              style={{
+                maxWidth: '640px',
+                margin: 0,
+                color: isDark ? 'rgba(248,250,252,0.82)' : '#475569',
+                fontSize: '16px',
+                lineHeight: 1.8
+              }}
+            >
+              {description}
+            </p>
+          ) : null}
 
           <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginTop: '24px' }}>
             {primaryAction && (
