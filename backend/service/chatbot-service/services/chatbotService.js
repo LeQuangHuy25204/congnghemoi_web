@@ -1,4 +1,4 @@
-﻿const axios = require("axios");
+const axios = require("axios");
 const ChatLog = require("../models/ChatLog");
 const createProductDbConnection = require("../config/productDb");
 const productSchema = require("../models/Product");
@@ -9,9 +9,9 @@ const Product = productDb.model("Product", productSchema, "products");
 const ORDER_SERVICE_URL = process.env.ORDER_SERVICE_URL || "http://localhost:5004";
 
 const replies = [
-  "Mình tìm được các sản phẩm phù hợp:",
-  "Bạn tham khảo các sản phẩm sau nhé:",
-  "Dưới đây là những lựa chọn phù hợp:"
+  "Mình tìm được vài sản phẩm khá sát nhu cầu của bạn:",
+  "Bạn tham khảo các sản phẩm phù hợp này nhé:",
+  "Dưới đây là những lựa chọn mình lọc được cho bạn:"
 ];
 
 const pickReply = () => replies[Math.floor(Math.random() * replies.length)];
@@ -28,13 +28,87 @@ const ORDER_INTENT_KEYWORDS = [
   "don cua minh",
   "tra cuu don",
   "kiem tra don",
+  "xem don",
+  "xem lich su mua",
   "tinh trang don",
   "trang thai don",
   "lich su mua",
+  "lich su don hang",
   "order",
   "orders",
   "my order"
 ];
+
+const GREETING_KEYWORDS = ["chao", "xin chao", "hello", "hi", "alo", "hey"];
+const IN_STOCK_KEYWORDS = ["con hang", "san hang", "co hang", "ton kho", "available"];
+const APPROXIMATE_BUDGET_KEYWORDS = ["tam", "tam gia", "khoang", "duoi", "toi da", "gan"];
+
+const CATEGORY_ALIASES = {
+  "dien thoai": ["dien thoai", "smartphone", "phone", "mobile", "dt", "dthoai"],
+  laptop: ["laptop", "notebook", "may tinh xach tay"],
+  tablet: ["tablet", "ipad", "may tinh bang"],
+  accessory: ["phu kien", "accessory", "tai nghe", "sac", "cap", "op lung"]
+};
+
+const BRAND_ALIASES = {
+  apple: ["apple", "iphone", "ipad"],
+  samsung: ["samsung", "galaxy"],
+  oppo: ["oppo"],
+  xiaomi: ["xiaomi", "redmi"],
+  honor: ["honor"],
+  vivo: ["vivo"],
+  realme: ["realme"],
+  nokia: ["nokia"]
+};
+
+const STOP_WORDS = new Set(
+  [
+    "tu",
+    "van",
+    "goi",
+    "y",
+    "toi",
+    "minh",
+    "em",
+    "anh",
+    "chi",
+    "muon",
+    "can",
+    "tim",
+    "mua",
+    "san",
+    "pham",
+    "loai",
+    "nao",
+    "cho",
+    "di",
+    "giup",
+    "voi",
+    "co",
+    "khong",
+    "duoi",
+    "tren",
+    "khoang",
+    "tam",
+    "gia",
+    "muc",
+    "ngan",
+    "sach",
+    "va",
+    "hay",
+    "roi",
+    "nhe",
+    "nha",
+    "giup minh",
+    "co the",
+    "tim giup",
+    "con",
+    "hang",
+    "may",
+    "cua",
+    "lo"
+  ].map((word) => normalizeText(word))
+);
 
 const STATUS_LABELS = {
   pending: "Đang chờ xác nhận",
@@ -48,6 +122,16 @@ const formatPrice = (value) => {
   if (typeof value !== "number" || Number.isNaN(value)) return "N/A";
   return `${value.toLocaleString("vi-VN")} VND`;
 };
+
+const normalizeWithDiacritics = (value) => {
+  return (value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\u00C0-\u024F\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+};
+
+const containsKeyword = (text, keywords) => keywords.some((keyword) => text.includes(keyword));
 
 const getOrderStatusLabel = (status) => STATUS_LABELS[status] || status || "khong ro";
 
@@ -85,7 +169,7 @@ const formatSingleOrderBlock = (order, index) => {
 
 const isOrderLookupIntent = (message) => {
   const text = normalizeText(message);
-  return ORDER_INTENT_KEYWORDS.some((keyword) => text.includes(keyword));
+  return containsKeyword(text, ORDER_INTENT_KEYWORDS);
 };
 
 const extractOrderCode = (message) => {
@@ -270,105 +354,225 @@ const buildOrderFallbackReply = (orders, queriedOrderCode) => {
   return `Mình đã tìm thấy ${orders.length} đơn của bạn:\n\n${blocks.join("\n\n----------------\n\n")}`;
 };
 
-const isGreeting = (message) => {
-  const text = normalizeText(message);
-  const words = text.split(" ").filter(Boolean);
-  if (words.includes("chao") || words.includes("hello") || words.includes("hi")) {
-    return true;
-  }
-  for (let i = 0; i < words.length - 1; i += 1) {
-    if (words[i] === "xin" && words[i + 1] === "chao") {
-      return true;
-    }
-  }
-  return false;
-};
+const isGreeting = (message) => containsKeyword(normalizeText(message), GREETING_KEYWORDS);
 
 const removePricePhrase = (text) => {
   const priceRegex = /(\d+(?:[.,]\d+)?)\s*(trieu|tr|cu|k|nghin|ngan|dong|vnd|vnđ)/g;
   return text.replace(priceRegex, " ");
 };
 
-const normalizeWithDiacritics = (value) => {
-  return (value || "")
-    .toLowerCase()
-    .replace(/[^a-z0-9\u00C0-\u024F\s]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+const detectCanonicalValue = (normalizedText, aliasMap) => {
+  for (const [canonical, aliases] of Object.entries(aliasMap)) {
+    if (aliases.some((alias) => normalizedText.includes(normalizeText(alias)))) {
+      return canonical;
+    }
+  }
+  return "";
 };
 
-const extractKeyword = (message) => {
+const aliasTokenSet = (aliasMap) => {
+  const tokens = new Set();
+  for (const aliases of Object.values(aliasMap)) {
+    aliases.forEach((alias) => {
+      normalizeText(alias)
+        .split(" ")
+        .filter(Boolean)
+        .forEach((token) => tokens.add(token));
+    });
+  }
+  return tokens;
+};
+
+const CATEGORY_ALIAS_TOKENS = aliasTokenSet(CATEGORY_ALIASES);
+const BRAND_ALIAS_TOKENS = aliasTokenSet(BRAND_ALIASES);
+
+const extractSearchSignals = (message) => {
   const original = normalizeWithDiacritics(removePricePhrase(message));
   const normalized = normalizeText(removePricePhrase(message));
-
-  const stopWords = new Set(
-    [
-      "tư",
-      "vấn",
-      "gợi",
-      "ý",
-      "tôi",
-      "mình",
-      "muốn",
-      "cần",
-      "tìm",
-      "mua",
-      "sản",
-      "phẩm",
-      "loại",
-      "nào",
-      "cho",
-      "đi",
-      "giúp",
-      "với",
-      "có",
-      "không",
-      "dưới",
-      "trên",
-      "khoảng",
-      "tầm",
-      "giá",
-      "mức",
-      "ngân",
-      "sách"
-    ].map((w) => normalizeText(w))
-  );
+  const price = extractPriceVnd(message);
+  const category = detectCanonicalValue(normalized, CATEGORY_ALIASES);
+  const brand = detectCanonicalValue(normalized, BRAND_ALIASES);
+  const requireInStock = containsKeyword(normalized, IN_STOCK_KEYWORDS);
+  const allowApproximateBudget = containsKeyword(normalized, APPROXIMATE_BUDGET_KEYWORDS);
 
   const originalTokens = original.split(" ").filter(Boolean);
   const normalizedTokens = normalized.split(" ").filter(Boolean);
-  const keptTokens = [];
+  const freeTextTokens = [];
 
   for (let i = 0; i < normalizedTokens.length; i += 1) {
-    const n = normalizedTokens[i];
-    if (!stopWords.has(n)) {
-      keptTokens.push(originalTokens[i] || n);
-    }
+    const token = normalizedTokens[i];
+    if (STOP_WORDS.has(token)) continue;
+    if (CATEGORY_ALIAS_TOKENS.has(token)) continue;
+    if (BRAND_ALIAS_TOKENS.has(token)) continue;
+    if (/^\d+$/.test(token)) continue;
+    freeTextTokens.push({
+      normalized: token,
+      original: originalTokens[i] || token
+    });
   }
 
-  const keywordOriginal = keptTokens.join(" ").trim();
-  const keywordNormalized = normalizeText(keywordOriginal);
+  const deduped = [];
+  const seen = new Set();
+  freeTextTokens.forEach((token) => {
+    if (seen.has(token.normalized)) return;
+    seen.add(token.normalized);
+    deduped.push(token);
+  });
 
   return {
-    keywordOriginal,
-    keywordNormalized
+    normalizedMessage: normalized,
+    originalMessage: original,
+    category,
+    brand,
+    price,
+    requireInStock,
+    allowApproximateBudget,
+    tokens: deduped,
+    keywordOriginal: deduped.map((item) => item.original).join(" ").trim(),
+    keywordNormalized: deduped.map((item) => item.normalized).join(" ").trim()
   };
 };
 
-const searchProductsByName = async ({ keywordOriginal, keywordNormalized, price }) => {
-  const patterns = [];
-  if (keywordOriginal) {
-    patterns.push({ name: { $regex: keywordOriginal, $options: "i" } });
-  }
-  if (keywordNormalized && keywordNormalized !== keywordOriginal) {
-    patterns.push({ name: { $regex: keywordNormalized, $options: "i" } });
+const normalizeProductFields = (product) => {
+  const name = normalizeText(product?.name || "");
+  const category = normalizeText(product?.category || "");
+  const brand = normalizeText(product?.brand || "");
+  const description = normalizeText(product?.description || "");
+  return {
+    name,
+    category,
+    brand,
+    description,
+    searchable: `${name} ${category} ${brand} ${description}`.trim()
+  };
+};
+
+const scoreProduct = (product, signals) => {
+  const fields = normalizeProductFields(product);
+  let score = 0;
+
+  if (signals.brand) {
+    if (fields.brand === signals.brand || fields.name.includes(signals.brand)) {
+      score += 10;
+    } else {
+      return -1;
+    }
   }
 
-  const query = patterns.length > 0 ? { $or: patterns } : {};
-  if (price) {
-    query.price = { $lte: price };
+  if (signals.category) {
+    if (fields.category.includes(signals.category) || fields.searchable.includes(signals.category)) {
+      score += 8;
+    } else {
+      return -1;
+    }
   }
 
-  return Product.find(query).limit(5);
+  signals.tokens.forEach((token) => {
+    if (fields.name.includes(token.normalized)) {
+      score += 6;
+    } else if (fields.searchable.includes(token.normalized)) {
+      score += 3;
+    }
+  });
+
+  if (signals.keywordNormalized && fields.name.includes(signals.keywordNormalized)) {
+    score += 5;
+  }
+
+  if (signals.price) {
+    const budget = Number(signals.price);
+    const productPrice = Number(product?.price || 0);
+    if (productPrice <= budget) {
+      score += 4;
+    } else if (signals.allowApproximateBudget && productPrice <= budget * 1.15) {
+      score += 1;
+    } else if (!signals.allowApproximateBudget) {
+      score -= 4;
+    }
+
+    const gapRatio = Math.abs(productPrice - budget) / Math.max(budget, 1);
+    score += Math.max(0, 3 - gapRatio * 6);
+  }
+
+  if (Number(product?.stock || 0) > 0) {
+    score += 1.5;
+  } else if (signals.requireInStock) {
+    score -= 6;
+  }
+
+  if (!signals.brand && !signals.category && signals.tokens.length === 0) {
+    score += 0.5;
+  }
+
+  return score;
+};
+
+const buildProductQuery = (signals, widenBudget = false) => {
+  const query = {};
+
+  if (signals.requireInStock) {
+    query.stock = { $gt: 0 };
+  }
+
+  if (signals.price) {
+    const upper = widenBudget || signals.allowApproximateBudget
+      ? Math.round(Number(signals.price) * 1.15)
+      : Number(signals.price);
+    query.price = { $lte: upper };
+  }
+
+  return query;
+};
+
+const findProductsBySignals = async (signals) => {
+  const query = buildProductQuery(signals, false);
+  let candidates = await Product.find(query).sort({ stock: -1, createdAt: -1 }).limit(80).lean();
+
+  let ranked = candidates
+    .map((product) => ({ product, score: scoreProduct(product, signals) }))
+    .filter((item) => item.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 5)
+    .map((item) => item.product);
+
+  if (ranked.length === 0 && signals.price) {
+    candidates = await Product.find(buildProductQuery(signals, true)).sort({ stock: -1, createdAt: -1 }).limit(120).lean();
+    ranked = candidates
+      .map((product) => ({ product, score: scoreProduct(product, { ...signals, allowApproximateBudget: true }) }))
+      .filter((item) => item.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 5)
+      .map((item) => item.product);
+  }
+
+  return ranked;
+};
+
+const buildSearchFallbackReply = (signals, products) => {
+  if (!products || products.length === 0) {
+    const parts = [];
+    if (signals.category) parts.push(`danh mục ${signals.category}`);
+    if (signals.brand) parts.push(`hãng ${signals.brand}`);
+    if (signals.price) parts.push(`ngân sách khoảng ${formatPrice(signals.price)}`);
+    const summary = parts.length > 0 ? ` theo ${parts.join(", ")}` : "";
+    return `Hiện tại mình chưa tìm thấy sản phẩm phù hợp${summary}. Bạn thử đổi tên sản phẩm, hãng hoặc tăng ngân sách một chút nhé.`;
+  }
+
+  const summary = [];
+  if (signals.category) summary.push(`dòng ${signals.category}`);
+  if (signals.brand) summary.push(`hãng ${signals.brand}`);
+  if (signals.price) summary.push(`tầm ${formatPrice(signals.price)}`);
+  const suffix = summary.length > 0 ? ` cho nhu cầu ${summary.join(", ")}` : "";
+  return `${pickReply()} Mình ưu tiên các lựa chọn${suffix}.`;
+};
+
+const persistChatLog = ({ user_id, message, response, intent }) => {
+  ChatLog.create({
+    user_id,
+    message,
+    response,
+    intent
+  }).catch(() => {});
 };
 
 const handleChat = async ({ user_id, actor_user_id, message }) => {
@@ -384,12 +588,12 @@ const handleChat = async ({ user_id, actor_user_id, message }) => {
 
     if (!lookupUserId) {
       const reply = "Bạn vui lòng đăng nhập để mình tra cứu đơn hàng của bạn nhé.";
-      ChatLog.create({
+      persistChatLog({
         user_id: effectiveUserId,
         message,
         response: reply,
         intent: "order_lookup"
-      }).catch(() => {});
+      });
 
       return { status: 200, body: { reply, products: [], orders: [] } };
     }
@@ -397,12 +601,12 @@ const handleChat = async ({ user_id, actor_user_id, message }) => {
     const orderResult = await fetchMyOrders(lookupUserId);
     if (!orderResult.ok) {
       const reply = "Hiện tại mình chưa tra cứu được đơn hàng. Bạn thử lại sau giúp mình nhé.";
-      ChatLog.create({
+      persistChatLog({
         user_id: effectiveUserId,
         message,
         response: reply,
         intent: "order_lookup"
-      }).catch(() => {});
+      });
 
       return { status: 200, body: { reply, products: [], orders: [] } };
     }
@@ -415,79 +619,63 @@ const handleChat = async ({ user_id, actor_user_id, message }) => {
         })
       : allOrders;
 
-    const reply = buildOrderFallbackReply(orders, queriedOrderCode);
+    const reply =
+      (await generateGeminiOrderReply({
+        message,
+        orders,
+        queriedOrderCode
+      })) || buildOrderFallbackReply(orders, queriedOrderCode);
 
-    ChatLog.create({
+    persistChatLog({
       user_id: effectiveUserId,
       message,
       response: reply,
       intent: "order_lookup"
-    }).catch(() => {});
+    });
 
     return { status: 200, body: { reply, products: [], orders: orders.slice(0, 5) } };
   }
 
   if (isGreeting(message)) {
-    const reply = "Chào bạn! Bạn cần tư vấn sản phẩm nào?";
-    ChatLog.create({
+    const reply = "Chào bạn! Bạn cần tư vấn sản phẩm nào? Bạn có thể nói tên máy, hãng hoặc tầm giá.";
+    persistChatLog({
       user_id: effectiveUserId,
       message,
       response: reply,
       intent: "greeting"
-    }).catch(() => {});
+    });
 
     return { status: 200, body: { reply, products: [] } };
   }
 
-  const { keywordOriginal, keywordNormalized } = extractKeyword(message);
-  if (!keywordOriginal && !keywordNormalized) {
-    const reply = "Bạn đang tìm sản phẩm gì?";
-    ChatLog.create({
+  const signals = extractSearchSignals(message);
+  if (!signals.category && !signals.brand && !signals.keywordOriginal && !signals.keywordNormalized && !signals.price) {
+    const reply = "Bạn đang tìm sản phẩm gì? Ví dụ: điện thoại Samsung dưới 10 triệu hoặc iPhone còn hàng.";
+    persistChatLog({
       user_id: effectiveUserId,
       message,
       response: reply,
       intent: "unknown"
-    }).catch(() => {});
+    });
 
     return { status: 200, body: { reply, products: [] } };
   }
 
-  const price = extractPriceVnd(message);
-  const products = await searchProductsByName({ keywordOriginal, keywordNormalized, price });
-
-  if (!products || products.length === 0) {
-    const fallbackReply = "Hiện tại mình chưa tìm thấy sản phẩm phù hợp 😅";
-    const reply =
-      (await generateGeminiReply({
-        message,
-        products,
-        price
-      })) || fallbackReply;
-
-    ChatLog.create({
-      user_id: effectiveUserId,
-      message,
-      response: reply,
-      intent: "search"
-    }).catch(() => {});
-
-    return { status: 200, body: { reply, products: [] } };
-  }
-
-  const fallbackReply = pickReply();
+  const products = await findProductsBySignals(signals);
+  const fallbackReply = buildSearchFallbackReply(signals, products);
   const reply =
     (await generateGeminiReply({
       message,
       products,
-      price
+      price: signals.price
     })) || fallbackReply;
 
-  ChatLog.create({
+  persistChatLog({
     user_id: effectiveUserId,
     message,
     response: reply,
     intent: "search"
-  }).catch(() => {});
+  });
 
   return {
     status: 200,
@@ -501,4 +689,3 @@ const handleChat = async ({ user_id, actor_user_id, message }) => {
 module.exports = {
   handleChat
 };
-

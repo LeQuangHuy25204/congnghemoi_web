@@ -1,0 +1,162 @@
+services:
+  auth-service:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+      args:
+        SERVICE_PATH: backend/service/auth-service
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org/}
+    environment:
+      PORT: 5001
+      MONGO_URI: mongodb://${MONGO_HOST:-host.docker.internal}:${MONGO_PORT:-27017}/auth_db
+      JWT_SECRET: ${JWT_SECRET:-super_secret_key}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - app-net
+
+  product-service:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+      args:
+        SERVICE_PATH: backend/service/product-service
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org/}
+    environment:
+      PORT: 5002
+      MONGO_URI: mongodb://${MONGO_HOST:-host.docker.internal}:${MONGO_PORT:-27017}/product_db
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./backend/public/img:/app/backend/public/img
+    networks:
+      - app-net
+
+  cart-service:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+      args:
+        SERVICE_PATH: backend/service/cart-service
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org/}
+    environment:
+      PORT: 5003
+      MONGO_URI: mongodb://${MONGO_HOST:-host.docker.internal}:${MONGO_PORT:-27017}/cart_db
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - app-net
+
+  order-service:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+      args:
+        SERVICE_PATH: backend/service/order-service
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org/}
+    environment:
+      PORT: 5004
+      MONGO_URI: mongodb://${MONGO_HOST:-host.docker.internal}:${MONGO_PORT:-27017}/order_db
+      PRODUCT_SERVICE_URL: http://product-service:5002
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - app-net
+
+  payment-service:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+      args:
+        SERVICE_PATH: backend/service/payment-service
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org/}
+    environment:
+      PORT: 5005
+      MONGO_URI: mongodb://${MONGO_HOST:-host.docker.internal}:${MONGO_PORT:-27017}/payment_db
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - app-net
+
+  chatbot-service:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+      args:
+        SERVICE_PATH: backend/service/chatbot-service
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org/}
+    environment:
+      PORT: 5006
+      MONGO_URI: mongodb://${MONGO_HOST:-host.docker.internal}:${MONGO_PORT:-27017}/chatbot_db
+      PRODUCT_DB_URI: mongodb://${MONGO_HOST:-host.docker.internal}:${MONGO_PORT:-27017}/product_db
+      ORDER_SERVICE_URL: http://order-service:5004
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.0-flash}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - app-net
+
+  support-service:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+      args:
+        SERVICE_PATH: backend/service/support-service
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org/}
+    environment:
+      PORT: 5007
+      MONGO_URI: mongodb://${MONGO_HOST:-host.docker.internal}:${MONGO_PORT:-27017}/support_db
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - app-net
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+      args:
+        SERVICE_PATH: api-gateway
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org/}
+    depends_on:
+      - auth-service
+      - product-service
+      - cart-service
+      - order-service
+      - payment-service
+      - chatbot-service
+      - support-service
+    environment:
+      PORT: 5000
+      JWT_SECRET: ${JWT_SECRET:-super_secret_key}
+      AUTH_SERVICE_URL: http://auth-service:5001
+      PRODUCT_SERVICE_URL: http://product-service:5002
+      CART_SERVICE_URL: http://cart-service:5003
+      ORDER_SERVICE_URL: http://order-service:5004
+      PAYMENT_SERVICE_URL: http://payment-service:5005
+      CHATBOT_SERVICE_URL: http://chatbot-service:5006
+      SUPPORT_SERVICE_URL: http://support-service:5007
+    volumes:
+      - ./backend/public/img:/app/backend/public/img
+    ports:
+      - "5000:5000"
+    networks:
+      - app-net
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:5000/api}
+    depends_on:
+      - api-gateway
+    ports:
+      - "3000:80"
+    networks:
+      - app-net
+
+networks:
+  app-net:
+    driver: bridge

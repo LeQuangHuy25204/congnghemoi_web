@@ -146,16 +146,18 @@ app.use(
     target: orderService,
     changeOrigin: true,
     pathRewrite: (path) => `/api/orders${path}`,
-    onProxyReq: (proxyReq, req) => {
-      const authHeader = req.headers.authorization;
-      const tokenUser = resolveUserFromToken(authHeader);
-      const userId = resolveUserId(req.user) || tokenUser.userId || "";
-      const role = req.user?.role || tokenUser.role || "customer";
-      if (userId) {
-        proxyReq.setHeader("x-user-id", userId);
-      }
-      if (role) {
-        proxyReq.setHeader("x-user-role", role);
+    on: {
+      proxyReq: (proxyReq, req) => {
+        const authHeader = req.headers.authorization;
+        const tokenUser = resolveUserFromToken(authHeader);
+        const userId = resolveUserId(req.user) || tokenUser.userId || "";
+        const role = req.user?.role || tokenUser.role || "customer";
+        if (userId) {
+          proxyReq.setHeader("x-user-id", userId);
+        }
+        if (role) {
+          proxyReq.setHeader("x-user-role", role);
+        }
       }
     }
   })
@@ -178,10 +180,12 @@ app.use(
     target: chatbotService,
     changeOrigin: true,
     pathRewrite: (path) => `/api/chat${path}`,
-    onProxyReq: (proxyReq, req) => {
-      if (req.user) {
-        proxyReq.setHeader("x-user-id", resolveUserId(req.user));
-        proxyReq.setHeader("x-user-role", req.user.role || "customer");
+    on: {
+      proxyReq: (proxyReq, req) => {
+        if (req.user) {
+          proxyReq.setHeader("x-user-id", resolveUserId(req.user));
+          proxyReq.setHeader("x-user-role", req.user.role || "customer");
+        }
       }
     }
   })

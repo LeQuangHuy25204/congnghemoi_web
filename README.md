@@ -80,3 +80,43 @@ Public routes:
 - /api/products/*
 
 Important: JWT_SECRET in backend/api-gateway/.env must be the same as JWT_SECRET in backend/service/auth-service/.env.
+
+## 7) Run with Docker while keeping MongoDB on your machine
+
+This repo now includes:
+- `docker-compose.yml`
+- `docker/backend.Dockerfile`
+- `docker/frontend.Dockerfile`
+
+The Docker setup does not create a MongoDB container. All services connect to the MongoDB server running on your host machine, so the same data remains visible in MongoDB Compass.
+
+### Prepare environment
+
+1. Copy the Docker env template:
+
+```powershell
+Copy-Item .env.docker.example .env
+```
+
+2. Make sure your local MongoDB server is running on the host machine.
+
+3. If your MongoDB only listens on `127.0.0.1`, containers may not reach it. In that case, update MongoDB to listen on the host network as well, for example:
+- `bindIp: 0.0.0.0`
+
+Then restart MongoDB.
+
+### Build and run
+
+```powershell
+docker compose up --build
+```
+
+App URLs:
+- Frontend: http://localhost:3000
+- API Gateway: http://localhost:5000
+
+### Notes
+
+- Docker services use `host.docker.internal` to reach MongoDB on your machine.
+- MongoDB Compass is only a client UI. The actual database server (`mongod`) still needs to be running locally or remotely.
+- Uploaded product images are stored in `backend/public/img` on your host, not inside ephemeral containers.
