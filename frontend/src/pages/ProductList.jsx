@@ -130,11 +130,7 @@ function ProductCard({ product, accent, onAddToCart }) {
           <img
             src={resolveImageUrl(product.image)}
             alt={product.name || product.title}
-            style={{
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover'
-            }}
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
           />
         ) : (
           <div
@@ -417,20 +413,6 @@ export default function ProductList() {
     }
   };
 
-  const categories = useMemo(
-    () => Array.from(new Set(products.map((item) => item.category).filter(Boolean))).sort(),
-    [products]
-  );
-
-  const brands = useMemo(() => {
-    const source =
-      activeCategory === 'all'
-        ? products
-        : products.filter((item) => (item.category || '') === activeCategory);
-
-    return Array.from(new Set(source.map((item) => item.brand).filter(Boolean))).sort();
-  }, [products, activeCategory]);
-
   const filteredProducts = useMemo(() => {
     const normalizedQuery = normalizeText(query);
 
@@ -523,7 +505,7 @@ export default function ProductList() {
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'minmax(220px, 1.2fr) repeat(2, minmax(180px, 0.7fr)) auto',
+            gridTemplateColumns: 'minmax(220px, 1fr) auto',
             gap: '12px',
             alignItems: 'center'
           }}
@@ -537,45 +519,8 @@ export default function ProductList() {
             style={{ minHeight: '48px', borderRadius: '14px' }}
           />
 
-          <select
-            className="form-select"
-            value={activeCategory}
-            onChange={(event) => {
-              setActiveCategory(event.target.value);
-              setActiveBrand('all');
-            }}
-            style={{ minHeight: '48px', borderRadius: '14px' }}
-          >
-            <option value="all">Tất cả danh mục</option>
-            {categories.map((category) => (
-              <option key={category} value={category}>
-                {category}
-              </option>
-            ))}
-          </select>
-
-          <select
-            className="form-select"
-            value={activeBrand}
-            onChange={(event) => setActiveBrand(event.target.value)}
-            style={{ minHeight: '48px', borderRadius: '14px' }}
-          >
-            <option value="all">Tất cả thương hiệu</option>
-            {brands.map((brand) => (
-              <option key={brand} value={brand}>
-                {brand}
-              </option>
-            ))}
-          </select>
-
           <div style={{ display: 'flex', gap: '10px', justifyContent: 'end', flexWrap: 'wrap' }}>
-            <button
-              className="btn btn-primary"
-              onClick={handleSearch}
-              style={{
-                minWidth: '108px'
-              }}
-            >
+            <button className="btn btn-primary" onClick={handleSearch} style={{ minWidth: '108px' }}>
               Tìm kiếm
             </button>
             <button
@@ -603,28 +548,8 @@ export default function ProductList() {
             marginTop: '16px'
           }}
         >
-          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-            {categories.slice(0, 8).map((category) => (
-              <button
-                key={category}
-                onClick={() => {
-                  setActiveCategory(category);
-                  setActiveBrand('all');
-                }}
-                style={{
-                  padding: '9px 14px',
-                  borderRadius: '999px',
-                  border: activeCategory === category ? '1px solid #ffffff' : '1px solid rgba(255,255,255,0.55)',
-                  background: activeCategory === category ? '#fff7ed' : 'rgba(255,255,255,0.92)',
-                  color: activeCategory === category ? '#c2410c' : '#7c2d12',
-                  fontSize: '13px',
-                  fontWeight: 700,
-                  cursor: 'pointer'
-                }}
-              >
-                {category}
-              </button>
-            ))}
+          <div style={{ fontSize: '14px', fontWeight: 700, color: '#7c2d12' }}>
+            Các cụm sản phẩm được hiển thị trực tiếp để bạn duyệt nhanh hơn.
           </div>
 
           <div style={{ display: 'flex', gap: '8px' }}>
@@ -674,7 +599,7 @@ export default function ProductList() {
             Không tìm thấy sản phẩm phù hợp
           </div>
           <div style={{ color: '#64748b', marginBottom: '18px' }}>
-            Hãy thử đổi từ khóa, danh mục hoặc thương hiệu để nới rộng kết quả.
+            Hãy thử đổi từ khóa để nới rộng kết quả.
           </div>
           <button className="btn btn-primary" onClick={handleReset}>
             Xóa bộ lọc
@@ -689,7 +614,8 @@ export default function ProductList() {
               padding: '24px',
               background: group.meta.surface,
               border: `1px solid ${group.meta.accent}22`,
-              boxShadow: '0 20px 40px rgba(15, 23, 42, 0.06)'
+              boxShadow: '0 20px 40px rgba(15, 23, 42, 0.06)',
+              marginBottom: '22px'
             }}
           >
             <div
@@ -727,25 +653,19 @@ export default function ProductList() {
                 </div>
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'end' }}>
                   {group.brands.slice(0, 6).map((brand) => (
-                    <button
+                    <span
                       key={brand}
-                      onClick={() => {
-                        setActiveCategory(group.category);
-                        setActiveBrand(brand);
-                      }}
                       style={{
                         padding: '8px 12px',
                         borderRadius: '999px',
-                        border: activeBrand === brand ? `1px solid ${group.meta.accent}` : '1px solid transparent',
-                        background: activeBrand === brand ? '#ffffff' : '#ffffffb8',
-                        color: activeBrand === brand ? group.meta.accent : '#334155',
+                        background: '#ffffffb8',
+                        color: '#334155',
                         fontSize: '12px',
-                        fontWeight: 700,
-                        cursor: 'pointer'
+                        fontWeight: 700
                       }}
                     >
                       {brand}
-                    </button>
+                    </span>
                   ))}
                 </div>
               </div>

@@ -130,7 +130,7 @@ export default function Home() {
     <div style={{ display: 'grid', gap: '28px', paddingBottom: '24px' }}>
       <WelcomeHero
         eyebrow="Chào mừng"
-        title="Không gian mua sắm công nghệ gọn gàng, hiện đại và dễ chọn hơn."
+        title="Không gian mua sắm công nghệ gọn gàng, hiện đại và dễ chọn hơn"
         description=""
         primaryAction={{ to: '/products', label: 'Xem toàn bộ sản phẩm' }}
         secondaryAction={{ to: '/products', label: 'Khám phá ngay' }}
