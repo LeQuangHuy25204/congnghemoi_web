@@ -169,7 +169,15 @@ app.use(
   createProxyMiddleware({
     target: paymentService,
     changeOrigin: true,
-    pathRewrite: (path) => `/api/payment${path}`
+    pathRewrite: (path) => `/api/payment${path}`,
+    on: {
+      proxyReq: (proxyReq, req) => {
+        if (req.user) {
+          proxyReq.setHeader("x-user-id", resolveUserId(req.user));
+          proxyReq.setHeader("x-user-role", req.user.role || "customer");
+        }
+      }
+    }
   })
 );
 

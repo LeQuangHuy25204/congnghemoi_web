@@ -54,7 +54,12 @@ cd backend/api-gateway; npm run dev
 - Product: GET /api/products, GET /api/products/:id, POST /api/products, PUT /api/products/:id, DELETE /api/products/:id
 - Cart: GET /api/cart/:user_id, POST /api/cart/add, PUT /api/cart/update, DELETE /api/cart/remove
 - Order: POST /api/orders, GET /api/orders/:user_id, PUT /api/orders/:id/status
-- Payment: POST /api/payment
+- Payment:
+  - POST /api/payment
+  - GET /api/payment
+  - GET /api/payment/:id
+  - PATCH /api/payment/:id/status
+  - GET /api/payment/:id/vietqr
 - Chatbot: POST /api/chat
 - Support: POST /api/support/ticket, GET /api/support/tickets/:user_id
 
@@ -81,7 +86,21 @@ Public routes:
 
 Important: JWT_SECRET in backend/api-gateway/.env must be the same as JWT_SECRET in backend/service/auth-service/.env.
 
-## 7) Run with Docker while keeping MongoDB on your machine
+## 7) Payment service notes
+
+Copy `backend/service/payment-service/.env.example` to `.env` and fill credentials if you want real integrations:
+
+- `PAYOS_CLIENT_ID`, `PAYOS_API_KEY`, `PAYOS_CHECKSUM_KEY`, `PAYOS_RETURN_URL`, `PAYOS_CANCEL_URL`
+- `VIETQR_BANK_ID`, `VIETQR_ACCOUNT_NO`, `VIETQR_ACCOUNT_NAME`
+- Optional: `VIETQR_CLIENT_ID`, `VIETQR_API_KEY` for full VietQR API response (`qrCode`, `qrDataURL`)
+
+Method mapping in payment-service:
+
+- `cod` -> local COD payment
+- `momo` or `payos` -> PayOS payment link
+- `bank` or `vietqr` -> VietQR
+
+## 8) Run with Docker while keeping MongoDB on your machine
 
 This repo now includes:
 - `docker-compose.yml`

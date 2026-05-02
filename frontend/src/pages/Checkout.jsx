@@ -1,21 +1,37 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api, { getStoredUser } from '../services/api.js';
 
 const SHIPPING_FEE_BASE = 30000;
 
 const paymentMethods = [
-  { id: 'momo', name: 'Ví MoMo', icon: '📱' },
-  { id: 'bank', name: 'Thẻ ngân hàng', icon: '🏦' },
+  { id: 'bank', name: 'Thẻ ngân hàng / VietQR', icon: '🏦' },
   { id: 'cod', name: 'Thanh toán khi nhận hàng (COD)', icon: '🚚' }
 ];
 
-const formatPrice = (price) => {
-  return new Intl.NumberFormat('vi-VN', {
+const paymentStatusMap = {
+  pending: 'Chờ thanh toán',
+  processing: 'Đang xử lý',
+  paid: 'Đã thanh toán',
+  failed: 'Thất bại',
+  cancelled: 'Đã hủy',
+  expired: 'Hết hạn',
+  refunded: 'Đã hoàn tiền'
+};
+
+const bankNameMap = {
+  '970418': 'BIDV',
+  '970422': 'MB Bank',
+  '970415': 'VietinBank',
+  '970436': 'Vietcombank',
+  '970416': 'ACB'
+};
+
+const formatPrice = (price) =>
+  new Intl.NumberFormat('vi-VN', {
     style: 'currency',
     currency: 'VND'
   }).format(price || 0);
-};
 
 const parseJsonSafely = (raw, fallback) => {
   try {
@@ -36,10 +52,27 @@ const normalizeItems = (source) => {
   }));
 };
 
+const getOrderId = (source) => source?._id || source?.id || '';
+
+const isSettledPayment = (payment) => ['paid', 'cancelled', 'failed', 'expired', 'refunded'].includes(payment?.status);
+
+const normalizePaymentFromResponse = (payload) => payload?.payment || payload || null;
+
+const mapPaymentMethodToView = (value) => {
+  if (value === 'vietqr') return 'bank';
+  if (value === 'payos') return 'momo';
+  return value || 'cod';
+};
+
+const getBankDisplayName = (bankCode) => bankNameMap[String(bankCode || '').trim()] || bankCode || '-';
+
 export default function Checkout() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
+  const [paymentLoading, setPaymentLoading] = useState(false);
   const [alert, setAlert] = useState(null);
+  const [paymentAlert, setPaymentAlert] = useState(null);
+  const [existingPayment, setExistingPayment] = useState(null);
 
   const draft = parseJsonSafely(localStorage.getItem('checkoutDraft'), null);
   const selectedOrder = parseJsonSafely(localStorage.getItem('selectedOrder'), null);
@@ -47,6 +80,8 @@ export default function Checkout() {
 
   const checkoutSource = draft || selectedOrder || lastOrder;
   const items = normalizeItems(checkoutSource);
+  const orderId = getOrderId(checkoutSource);
+  const hasExistingOrder = Boolean(orderId);
 
   const savedAddresses = parseJsonSafely(localStorage.getItem('savedAddresses'), []);
   const [selectedAddressId, setSelectedAddressId] = useState('');
@@ -58,12 +93,87 @@ export default function Checkout() {
 
   const [method, setMethod] = useState('cod');
 
-  const subtotal = useMemo(() => {
-    return items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  }, [items]);
-
+  const subtotal = useMemo(() => items.reduce((sum, item) => sum + item.price * item.quantity, 0), [items]);
   const shippingFee = SHIPPING_FEE_BASE;
   const amountToPay = subtotal + shippingFee;
+
+  const refreshVietQr = async (paymentId, silent = false) => {
+    if (!paymentId) return null;
+
+    if (!silent) {
+      setPaymentLoading(true);
+      setPaymentAlert(null);
+    }
+
+    try {
+      const res = await api.get(`/payment/${paymentId}/vietqr`);
+      const payment = normalizePaymentFromResponse(res.data);
+      setExistingPayment(payment);
+      return payment;
+    } catch (error) {
+      if (!silent) {
+        setPaymentAlert(error?.response?.data?.message || 'Không lấy được VietQR.');
+      }
+      return null;
+    } finally {
+      if (!silent) {
+        setPaymentLoading(false);
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (!orderId) {
+      setExistingPayment(null);
+      return;
+    }
+
+    let ignore = false;
+
+    const loadExistingPayment = async () => {
+      setPaymentLoading(true);
+      setPaymentAlert(null);
+      try {
+        const res = await api.get('/payment', {
+          params: {
+            order_id: orderId,
+            limit: 1
+          }
+        });
+
+        if (ignore) return;
+        const payment = Array.isArray(res.data?.items) ? res.data.items[0] || null : null;
+        setExistingPayment(payment);
+        if (payment?.method) {
+          setMethod(mapPaymentMethodToView(payment.method));
+        }
+
+        const needsQr =
+          payment?._id &&
+          (payment?.provider === 'vietqr' || payment?.method === 'vietqr' || payment?.method === 'bank') &&
+          !payment?.qr_image_url &&
+          !payment?.qr_data_url;
+
+        if (needsQr) {
+          await refreshVietQr(payment._id, true);
+        }
+      } catch (error) {
+        if (!ignore) {
+          setExistingPayment(null);
+          setPaymentAlert(error?.response?.data?.message || 'Không tải được thông tin thanh toán.');
+        }
+      } finally {
+        if (!ignore) {
+          setPaymentLoading(false);
+        }
+      }
+    };
+
+    loadExistingPayment();
+    return () => {
+      ignore = true;
+    };
+  }, [orderId]);
 
   const handleAddressChange = (field, value) => {
     setAddressForm((prev) => ({ ...prev, [field]: value }));
@@ -108,6 +218,57 @@ export default function Checkout() {
     );
   };
 
+  const persistOrderSelection = (order) => {
+    localStorage.removeItem('checkoutDraft');
+    localStorage.setItem('lastOrder', JSON.stringify(order));
+    localStorage.setItem('selectedOrder', JSON.stringify(order));
+  };
+
+  const createOrReuseOrder = async (user) => {
+    if (hasExistingOrder) {
+      return checkoutSource;
+    }
+
+    const orderPayload = {
+      user_id: user._id,
+      items: items.map((item) => ({
+        product_id: item.product_id,
+        product_name: `${item.product_name} (${item.variant})`,
+        price: item.price,
+        quantity: item.quantity
+      })),
+      status: 'pending'
+    };
+
+    const orderRes = await api.post('/orders', orderPayload);
+    const createdOrder = orderRes.data?.order || orderRes.data;
+    await clearPurchasedItemsFromCart(user._id, items);
+    persistOrderSelection(createdOrder);
+    return createdOrder;
+  };
+
+  const handleCreatePayment = async (targetOrderId, userId) => {
+    const paymentRes = await api.post('/payment', {
+      order_id: targetOrderId,
+      user_id: userId,
+      amount: amountToPay,
+      method,
+      status: method === 'cod' ? 'pending' : 'processing',
+      items: items.map((item) => ({
+        name: item.product_name,
+        quantity: item.quantity,
+        price: Math.round(item.price)
+      })),
+      buyer_name: addressForm.recipient_name,
+      buyer_phone: addressForm.phone,
+      description: `Thanh toán ${String(targetOrderId).slice(-8)}`
+    });
+
+    const payment = normalizePaymentFromResponse(paymentRes.data);
+    setExistingPayment(payment);
+    return payment;
+  };
+
   const handlePlaceOrder = async (e) => {
     e.preventDefault();
     setAlert(null);
@@ -119,7 +280,7 @@ export default function Checkout() {
     }
 
     if (items.length === 0) {
-      setAlert({ type: 'warning', message: 'Không có sản phẩm nào để đặt hàng.' });
+      setAlert({ type: 'warning', message: 'Không có sản phẩm nào để thanh toán.' });
       return;
     }
 
@@ -130,41 +291,39 @@ export default function Checkout() {
 
     setLoading(true);
     try {
-      const orderPayload = {
-        user_id: user._id,
-        items: items.map((item) => ({
-          product_id: item.product_id,
-          product_name: `${item.product_name} (${item.variant})`,
-          price: item.price,
-          quantity: item.quantity
-        })),
-        status: 'pending'
-      };
+      const order = await createOrReuseOrder(user);
+      const payment = await handleCreatePayment(getOrderId(order), user._id);
 
-      const orderRes = await api.post('/orders', orderPayload);
-      const createdOrder = orderRes.data?.order || orderRes.data;
+      if (payment?.checkout_url) {
+        window.location.href = payment.checkout_url;
+        return;
+      }
 
-      await clearPurchasedItemsFromCart(user._id, items);
+      if (method === 'bank' && payment?._id && !payment?.qr_image_url && !payment?.qr_data_url) {
+        await refreshVietQr(payment._id, true);
+      }
 
-      await api.post('/payment', {
-        order_id: createdOrder?._id,
-        user_id: user._id,
-        amount: amountToPay,
-        method,
-        status: method === 'cod' ? 'pending' : 'paid'
+      if (method === 'cod') {
+        setAlert({ type: 'success', message: 'Đơn hàng đã được tạo. Bạn có thể theo dõi trong Lịch sử đơn hàng.' });
+        setTimeout(() => navigate('/orders/history'), 1200);
+        return;
+      }
+
+      setAlert({
+        type: 'success',
+        message: method === 'bank'
+          ? 'Đã tạo VietQR. Vui lòng quét mã bên dưới để thanh toán.'
+          : 'Đã tạo yêu cầu thanh toán.'
       });
-
-      localStorage.removeItem('checkoutDraft');
-      localStorage.setItem('lastOrder', JSON.stringify(createdOrder));
-      localStorage.setItem('selectedOrder', JSON.stringify(createdOrder));
-
-      setAlert({ type: 'success', message: 'Đặt hàng thành công! Bạn có thể theo dõi đơn trong mục Lịch sử.' });
-      setTimeout(() => navigate('/orders/history'), 1200);
     } catch (error) {
-      setAlert({ type: 'danger', message: error?.response?.data?.message || 'Đặt hàng thất bại. Vui lòng thử lại.' });
+      setAlert({ type: 'danger', message: error?.response?.data?.message || 'Đặt hàng hoặc tạo thanh toán thất bại. Vui lòng thử lại.' });
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleRefreshQr = async () => {
+    await refreshVietQr(existingPayment?._id);
   };
 
   if (!checkoutSource || items.length === 0) {
@@ -197,6 +356,14 @@ export default function Checkout() {
     );
   }
 
+  const showPaymentResult = existingPayment && !isSettledPayment(existingPayment) && existingPayment.method !== 'cod';
+  const statusLabel = paymentStatusMap[existingPayment?.status] || (existingPayment?.status || 'Chưa tạo');
+  const hasQr = Boolean(existingPayment?.qr_image_url || existingPayment?.qr_data_url);
+  const qrWarningMessage =
+    paymentAlert ||
+    existingPayment?.metadata?.integration_message ||
+    'Chưa lấy được mã QR. Hãy bấm Tải lại VietQR để thử lại sau khi kiểm tra cấu hình backend.';
+
   return (
     <div style={{ minHeight: '100vh', backgroundColor: 'var(--surface-secondary)' }}>
       <div style={{ backgroundColor: 'var(--surface)', borderBottom: '1px solid var(--border-light)', padding: '12px 0' }}>
@@ -213,9 +380,9 @@ export default function Checkout() {
 
       <div className="container-lg" style={{ paddingTop: '24px', paddingBottom: '40px' }}>
         <div style={{ marginBottom: '24px' }}>
-          <h1 style={{ fontSize: '32px', marginBottom: '8px', color: 'var(--primary-dark)' }}>🧾 Xác nhận đơn hàng</h1>
+          <h1 style={{ fontSize: '32px', marginBottom: '8px', color: 'var(--primary-dark)' }}>Xác nhận đơn hàng</h1>
           <p style={{ color: 'var(--muted)', fontSize: '16px', margin: 0 }}>
-            Kiểm tra giỏ hàng, nhập địa chỉ và chọn phương thức thanh toán
+            {showPaymentResult ? 'Thông tin thanh toán cho đơn hàng của bạn' : 'Kiểm tra giỏ hàng, nhập địa chỉ và chọn phương thức thanh toán'}
           </p>
         </div>
 
@@ -225,10 +392,16 @@ export default function Checkout() {
           </div>
         )}
 
+        {paymentAlert && (
+          <div className="alert alert-warning" style={{ marginBottom: '20px' }}>
+            {paymentAlert}
+          </div>
+        )}
+
         <form onSubmit={handlePlaceOrder} style={{ display: 'grid', gridTemplateColumns: '1fr 400px', gap: '24px' }}>
           <div style={{ display: 'grid', gap: '16px' }}>
             <div style={{ backgroundColor: 'var(--surface)', borderRadius: '8px', padding: '20px', boxShadow: 'var(--shadow)' }}>
-              <h3 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--primary-dark)', marginBottom: '16px' }}>4. Kiểm tra giỏ hàng</h3>
+              <h3 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--primary-dark)', marginBottom: '16px' }}>Đơn hàng</h3>
               <div className="table-responsive">
                 <table className="table table-sm align-middle mb-0">
                   <thead>
@@ -256,10 +429,10 @@ export default function Checkout() {
             </div>
 
             <div style={{ backgroundColor: 'var(--surface)', borderRadius: '8px', padding: '20px', boxShadow: 'var(--shadow)' }}>
-              <h3 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--primary-dark)', marginBottom: '16px' }}>5. Nhập địa chỉ nhận hàng</h3>
+              <h3 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--primary-dark)', marginBottom: '16px' }}>Địa chỉ nhận hàng</h3>
 
               <div style={{ marginBottom: '12px' }}>
-                <label style={{ display: 'block', fontSize: '14px', marginBottom: '6px' }}>Chọn địa chỉ đã lưu (nếu có)</label>
+                <label style={{ display: 'block', fontSize: '14px', marginBottom: '6px' }}>Chọn địa chỉ đã lưu</label>
                 <select className="form-select" value={selectedAddressId} onChange={(e) => handleSelectSavedAddress(e.target.value)}>
                   <option value="">Chọn địa chỉ đã lưu</option>
                   {savedAddresses.map((address) => (
@@ -307,39 +480,130 @@ export default function Checkout() {
             </div>
 
             <div style={{ backgroundColor: 'var(--surface)', borderRadius: '8px', padding: '20px', boxShadow: 'var(--shadow)' }}>
-              <h3 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--primary-dark)', marginBottom: '16px' }}>6. Chọn phương thức thanh toán</h3>
-              <div style={{ display: 'grid', gap: '10px' }}>
-                {paymentMethods.map((item) => (
-                  <label
-                    key={item.id}
+              <h3 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--primary-dark)', marginBottom: '16px' }}>
+                {showPaymentResult ? 'Thông tin thanh toán' : 'Chọn phương thức thanh toán'}
+              </h3>
+
+              {!showPaymentResult && (
+                <div style={{ display: 'grid', gap: '10px' }}>
+                  {paymentMethods.map((item) => (
+                    <label
+                      key={item.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px',
+                        border: method === item.id ? '2px solid var(--primary)' : '1px solid var(--border)',
+                        borderRadius: '8px',
+                        padding: '10px 12px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        name="paymentMethod"
+                        value={item.id}
+                        checked={method === item.id}
+                        onChange={(e) => setMethod(e.target.value)}
+                      />
+                      <span style={{ fontSize: '20px' }}>{item.icon}</span>
+                      <span>{item.name}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+
+              {showPaymentResult && (
+                <div style={{ display: 'grid', gap: '16px' }}>
+                  <div
                     style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '10px',
-                      border: method === item.id ? '2px solid var(--primary)' : '1px solid var(--border)',
+                      border: '1px solid var(--border)',
                       borderRadius: '8px',
-                      padding: '10px 12px',
-                      cursor: 'pointer'
+                      padding: '14px',
+                      background: 'var(--surface-secondary)'
                     }}
                   >
-                    <input
-                      type="radio"
-                      name="paymentMethod"
-                      value={item.id}
-                      checked={method === item.id}
-                      onChange={(e) => setMethod(e.target.value)}
-                    />
-                    <span style={{ fontSize: '20px' }}>{item.icon}</span>
-                    <span>{item.name}</span>
-                  </label>
-                ))}
-              </div>
+                    <div><strong>Trạng thái:</strong> {statusLabel}</div>
+                    <div><strong>Phương thức:</strong> {existingPayment?.provider || existingPayment?.method}</div>
+                    {existingPayment?.order_code ? <div><strong>Mã PayOS:</strong> {existingPayment.order_code}</div> : null}
+                  </div>
+
+                  {paymentLoading && !hasQr && (
+                    <div className="alert alert-info" style={{ marginBottom: 0 }}>
+                      Đang tải mã QR thanh toán...
+                    </div>
+                  )}
+
+                  {hasQr && (
+                    <div
+                      style={{
+                        border: '1px solid var(--border)',
+                        borderRadius: '8px',
+                        padding: '16px',
+                        textAlign: 'center'
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, marginBottom: '12px' }}>Mã VietQR</div>
+                      {existingPayment.qr_image_url ? (
+                        <img
+                          src={existingPayment.qr_image_url}
+                          alt="VietQR"
+                          style={{ width: '100%', maxWidth: '320px', borderRadius: '8px', border: '1px solid var(--border-light)' }}
+                        />
+                      ) : null}
+                      {existingPayment.qr_data_url ? (
+                        <div style={{ marginTop: '12px', wordBreak: 'break-all', fontSize: '12px', color: 'var(--muted)' }}>
+                          {existingPayment.qr_data_url}
+                        </div>
+                      ) : null}
+                      <div style={{ marginTop: '12px', fontSize: '14px' }}>
+                        <div><strong>Ngân hàng:</strong> {getBankDisplayName(existingPayment.acq_id)}</div>
+                        <div><strong>Số tài khoản:</strong> {existingPayment.account_no || '-'}</div>
+                        <div><strong>Tên tài khoản:</strong> {existingPayment.account_name || '-'}</div>
+                      </div>
+                      <button type="button" className="btn btn-outline-primary mt-3" onClick={handleRefreshQr} disabled={paymentLoading}>
+                        {paymentLoading ? 'Đang tải QR...' : 'Tải lại VietQR'}
+                      </button>
+                    </div>
+                  )}
+
+                  {!paymentLoading && !hasQr && (existingPayment?.provider === 'vietqr' || existingPayment?.method === 'vietqr' || method === 'bank') && (
+                    <div className="alert alert-warning" style={{ marginBottom: 0 }}>
+                      {qrWarningMessage}
+                    </div>
+                  )}
+
+                  {existingPayment?.checkout_url && (
+                    <a
+                      href={existingPayment.checkout_url}
+                      style={{
+                        display: 'inline-block',
+                        textAlign: 'center',
+                        padding: '12px 14px',
+                        background: 'var(--primary)',
+                        color: 'white',
+                        textDecoration: 'none',
+                        borderRadius: '6px',
+                        fontWeight: 700
+                      }}
+                    >
+                      Mở cổng thanh toán
+                    </a>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
           <div style={{ height: 'fit-content' }}>
             <div style={{ backgroundColor: 'var(--surface)', borderRadius: '8px', padding: '20px', boxShadow: 'var(--shadow)' }}>
               <h3 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--primary-dark)', marginBottom: '16px' }}>Tóm tắt thanh toán</h3>
+
+              {hasExistingOrder && (
+                <div style={{ fontSize: '13px', color: 'var(--muted)', marginBottom: '12px' }}>
+                  Mã đơn hàng: <strong>{orderId}</strong>
+                </div>
+              )}
 
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                 <span>Tạm tính</span>
@@ -357,28 +621,36 @@ export default function Checkout() {
                 <span style={{ fontWeight: 700, fontSize: '24px', color: 'var(--primary)' }}>{formatPrice(amountToPay)}</span>
               </div>
 
-              <button
-                type="submit"
-                disabled={loading}
-                style={{
-                  width: '100%',
-                  marginTop: '16px',
-                  padding: '12px 14px',
-                  background: loading ? 'var(--border)' : 'var(--primary)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '6px',
-                  fontSize: '16px',
-                  fontWeight: 700,
-                  cursor: loading ? 'not-allowed' : 'pointer'
-                }}
-              >
-                {loading ? 'Đang xử lý...' : '7. Đặt hàng'}
-              </button>
+              {!showPaymentResult && (
+                <button
+                  type="submit"
+                  disabled={loading}
+                  style={{
+                    width: '100%',
+                    marginTop: '16px',
+                    padding: '12px 14px',
+                    background: loading ? 'var(--border)' : 'var(--primary)',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    fontSize: '16px',
+                    fontWeight: 700,
+                    cursor: loading ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  {loading
+                    ? 'Đang xử lý...'
+                    : hasExistingOrder
+                      ? 'Thanh toán đơn hàng này'
+                      : 'Đặt hàng và thanh toán'}
+                </button>
+              )}
 
-              <div style={{ marginTop: '12px', fontSize: '13px', color: 'var(--muted)' }}>
-                8. Sau khi đặt, bạn vào Lịch sử để theo dõi trạng thái: Chờ xác nhận, Đang giao, Đã giao.
-              </div>
+              {showPaymentResult && (
+                <div style={{ marginTop: '16px', fontSize: '13px', color: 'var(--muted)' }}>
+                  Nếu bạn đã chuyển khoản, hãy refresh trạng thái sau khi giao dịch hoàn tất.
+                </div>
+              )}
             </div>
           </div>
         </form>

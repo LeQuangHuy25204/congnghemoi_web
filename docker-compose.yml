@@ -73,6 +73,17 @@ services:
     environment:
       PORT: 5005
       MONGO_URI: mongodb://${MONGO_HOST:-host.docker.internal}:${MONGO_PORT:-27017}/payment_db
+      VIETQR_BANK_ID: ${VIETQR_BANK_ID:-970418}
+      VIETQR_ACCOUNT_NO: ${VIETQR_ACCOUNT_NO:-6811679975}
+      VIETQR_ACCOUNT_NAME: ${VIETQR_ACCOUNT_NAME:-VO HAI TRIEU}
+      VIETQR_TEMPLATE: ${VIETQR_TEMPLATE:-compact2}
+      VIETQR_CLIENT_ID: ${VIETQR_CLIENT_ID:-}
+      VIETQR_API_KEY: ${VIETQR_API_KEY:-}
+      PAYOS_CLIENT_ID: ${PAYOS_CLIENT_ID:-}
+      PAYOS_API_KEY: ${PAYOS_API_KEY:-}
+      PAYOS_CHECKSUM_KEY: ${PAYOS_CHECKSUM_KEY:-}
+      PAYOS_RETURN_URL: ${PAYOS_RETURN_URL:-http://localhost:3000/checkout/success}
+      PAYOS_CANCEL_URL: ${PAYOS_CANCEL_URL:-http://localhost:3000/checkout/cancel}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
