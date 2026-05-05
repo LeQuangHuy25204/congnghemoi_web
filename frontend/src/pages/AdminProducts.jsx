@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import api from '../services/api.js';
 
 const gatewayBaseUrl = (api.defaults.baseURL || '').replace(/\/api\/?$/, '');
-const productMediaBaseUrl = import.meta.env.VITE_PRODUCT_MEDIA_BASE_URL || 'http://localhost:5002';
+const productMediaBaseUrl = import.meta.env.VITE_PRODUCT_MEDIA_BASE_URL || gatewayBaseUrl;
 
 const resolveImageUrl = (imagePath) => {
   if (!imagePath) return '';
