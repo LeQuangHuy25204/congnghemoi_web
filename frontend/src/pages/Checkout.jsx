@@ -1,11 +1,14 @@
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api, { getStoredUser } from '../services/api.js';
 
 const SHIPPING_FEE_BASE = 30000;
+const PAYMENT_POLL_INTERVAL_MS = 5000;
+const SEPAY_QR_IMAGE_BASE_URL = 'https://img.vietqr.io/image';
+const SEPAY_QR_TEMPLATE = 'compact2';
 
 const paymentMethods = [
-  { id: 'bank', name: 'Thẻ ngân hàng / VietQR', icon: '🏦' },
+  { id: 'bank', name: 'Chuyển khoản BIDV / SePay', icon: '🏦' },
   { id: 'cod', name: 'Thanh toán khi nhận hàng (COD)', icon: '🚚' }
 ];
 
@@ -53,18 +56,75 @@ const normalizeItems = (source) => {
 };
 
 const getOrderId = (source) => source?._id || source?.id || '';
-
 const isSettledPayment = (payment) => ['paid', 'cancelled', 'failed', 'expired', 'refunded'].includes(payment?.status);
-
 const normalizePaymentFromResponse = (payload) => payload?.payment || payload || null;
+const getApiErrorMessage = (error, fallback) =>
+  error?.response?.data?.message ||
+  error?.response?.data?.error?.message ||
+  (typeof error?.response?.data?.error === 'string' ? error.response.data.error : '') ||
+  error?.message ||
+  fallback;
 
 const mapPaymentMethodToView = (value) => {
-  if (value === 'vietqr') return 'bank';
-  if (value === 'payos') return 'momo';
+  if (value === 'vietqr' || value === 'sepay' || value === 'bank') return 'bank';
+  if (value === 'payos' || value === 'momo') return 'momo';
   return value || 'cod';
 };
 
 const getBankDisplayName = (bankCode) => bankNameMap[String(bankCode || '').trim()] || bankCode || '-';
+
+const buildTransferQrImageUrl = (payment) => {
+  const bankId = String(payment?.acq_id || '').trim();
+  const accountNo = String(payment?.account_no || '').trim();
+  if (!bankId || !accountNo) return '';
+
+  const query = new URLSearchParams();
+  if (Number(payment?.amount) > 0) query.set('amount', String(Math.round(Number(payment.amount))));
+  if (String(payment?.description || '').trim()) query.set('addInfo', String(payment.description).trim());
+  if (String(payment?.account_name || '').trim()) query.set('accountName', String(payment.account_name).trim());
+
+  const queryString = query.toString();
+  return `${SEPAY_QR_IMAGE_BASE_URL}/${encodeURIComponent(bankId)}-${encodeURIComponent(accountNo)}-${encodeURIComponent(
+    SEPAY_QR_TEMPLATE
+  )}.png${queryString ? `?${queryString}` : ''}`;
+};
+
+const formatDateTime = (value) => {
+  if (!value) return '-';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return new Intl.DateTimeFormat('vi-VN', {
+    dateStyle: 'short',
+    timeStyle: 'medium'
+  }).format(parsed);
+};
+
+const getPaymentTimestamp = (payment) => {
+  const value = payment?.updatedAt || payment?.createdAt || 0;
+  const parsed = new Date(value).getTime();
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const choosePreferredPayment = (primaryPayment, fallbackPayment) => {
+  if (!primaryPayment) return fallbackPayment;
+  if (!fallbackPayment) return primaryPayment;
+
+  if (fallbackPayment.status === 'paid' && primaryPayment.status !== 'paid') return fallbackPayment;
+  if (primaryPayment.status === 'paid' && fallbackPayment.status !== 'paid') return primaryPayment;
+
+  return getPaymentTimestamp(fallbackPayment) > getPaymentTimestamp(primaryPayment) ? fallbackPayment : primaryPayment;
+};
+
+const belongsToCurrentOrder = (payment, currentOrderId) =>
+  Boolean(payment?._id) && Boolean(currentOrderId) && String(payment.order_id || '') === String(currentOrderId);
+
+const isBankTransferPayment = (payment) =>
+  payment &&
+  (payment.provider === 'sepay' ||
+    payment.provider === 'vietqr' ||
+    payment.method === 'sepay' ||
+    payment.method === 'vietqr' ||
+    payment.method === 'bank');
 
 export default function Checkout() {
   const navigate = useNavigate();
@@ -73,6 +133,7 @@ export default function Checkout() {
   const [alert, setAlert] = useState(null);
   const [paymentAlert, setPaymentAlert] = useState(null);
   const [existingPayment, setExistingPayment] = useState(null);
+  const [hasShownPaidAlert, setHasShownPaidAlert] = useState(false);
 
   const draft = parseJsonSafely(localStorage.getItem('checkoutDraft'), null);
   const selectedOrder = parseJsonSafely(localStorage.getItem('selectedOrder'), null);
@@ -97,7 +158,61 @@ export default function Checkout() {
   const shippingFee = SHIPPING_FEE_BASE;
   const amountToPay = subtotal + shippingFee;
 
-  const refreshVietQr = async (paymentId, silent = false) => {
+  const loadExistingPaymentByOrderId = async (silent = true) => {
+    if (!orderId) return null;
+
+    if (!silent) {
+      setPaymentLoading(true);
+      setPaymentAlert(null);
+    }
+
+    try {
+      const res = await api.get('/payment', { params: { order_id: orderId, limit: 1 } });
+      const payment = Array.isArray(res.data?.items) ? res.data.items[0] || null : null;
+      setExistingPayment(payment);
+      if (payment?.method) {
+        setMethod(mapPaymentMethodToView(payment.method));
+      }
+      return payment;
+    } catch (error) {
+      if (!silent) {
+        setPaymentAlert(getApiErrorMessage(error, 'Không tải được thông tin thanh toán.'));
+      }
+      return null;
+    } finally {
+      if (!silent) {
+        setPaymentLoading(false);
+      }
+    }
+  };
+
+  const loadLatestUserPayment = async (silent = true) => {
+    if (!silent) {
+      setPaymentLoading(true);
+      setPaymentAlert(null);
+    }
+
+    try {
+      const res = await api.get('/payment', { params: { limit: 10 } });
+      const list = Array.isArray(res.data?.items) ? res.data.items : [];
+      return (
+        list.find((item) => isBankTransferPayment(item)) ||
+        list[0] ||
+        null
+      );
+    } catch (error) {
+      if (!silent) {
+        setPaymentAlert(getApiErrorMessage(error, 'Không tải được payment gần nhất.'));
+      }
+      return null;
+    } finally {
+      if (!silent) {
+        setPaymentLoading(false);
+      }
+    }
+  };
+
+  const fetchPaymentById = async (paymentId, silent = true) => {
     if (!paymentId) return null;
 
     if (!silent) {
@@ -106,13 +221,38 @@ export default function Checkout() {
     }
 
     try {
-      const res = await api.get(`/payment/${paymentId}/vietqr`);
+      const res = await api.get(`/payment/${paymentId}`);
       const payment = normalizePaymentFromResponse(res.data);
       setExistingPayment(payment);
       return payment;
     } catch (error) {
       if (!silent) {
-        setPaymentAlert(error?.response?.data?.message || 'Không lấy được VietQR.');
+        setPaymentAlert(getApiErrorMessage(error, 'Không tải được trạng thái thanh toán.'));
+      }
+      return null;
+    } finally {
+      if (!silent) {
+        setPaymentLoading(false);
+      }
+    }
+  };
+
+  const refreshSepayTransfer = async (paymentId, silent = false) => {
+    if (!paymentId) return null;
+
+    if (!silent) {
+      setPaymentLoading(true);
+      setPaymentAlert(null);
+    }
+
+    try {
+      const res = await api.get(`/payment/${paymentId}/sepay`);
+      const payment = normalizePaymentFromResponse(res.data);
+      setExistingPayment(payment);
+      return payment;
+    } catch (error) {
+      if (!silent) {
+        setPaymentAlert(getApiErrorMessage(error, 'Không lấy được thông tin SePay.'));
       }
       return null;
     } finally {
@@ -124,8 +264,16 @@ export default function Checkout() {
 
   useEffect(() => {
     if (!orderId) {
-      setExistingPayment(null);
-      return;
+      setHasShownPaidAlert(false);
+      loadLatestUserPayment(true).then((payment) => {
+        if (payment) {
+          setExistingPayment(payment);
+          if (payment?.method) {
+            setMethod(mapPaymentMethodToView(payment.method));
+          }
+        }
+      });
+      return undefined;
     }
 
     let ignore = false;
@@ -134,33 +282,32 @@ export default function Checkout() {
       setPaymentLoading(true);
       setPaymentAlert(null);
       try {
-        const res = await api.get('/payment', {
-          params: {
-            order_id: orderId,
-            limit: 1
-          }
-        });
-
+        const orderPayment = await loadExistingPaymentByOrderId(true);
         if (ignore) return;
-        const payment = Array.isArray(res.data?.items) ? res.data.items[0] || null : null;
-        setExistingPayment(payment);
-        if (payment?.method) {
-          setMethod(mapPaymentMethodToView(payment.method));
+
+        const latestPayment = await loadLatestUserPayment(true);
+        if (ignore) return;
+
+        const payment = choosePreferredPayment(orderPayment, latestPayment);
+        if (payment) {
+          setExistingPayment(payment);
+          if (payment?.method) {
+            setMethod(mapPaymentMethodToView(payment.method));
+          }
         }
 
-        const needsQr =
+        const needsTransferInfo =
           payment?._id &&
-          (payment?.provider === 'vietqr' || payment?.method === 'vietqr' || payment?.method === 'bank') &&
-          !payment?.qr_image_url &&
-          !payment?.qr_data_url;
+          isBankTransferPayment(payment) &&
+          (!payment?.account_no || !payment?.account_name || !payment?.qr_image_url);
 
-        if (needsQr) {
-          await refreshVietQr(payment._id, true);
+        if (needsTransferInfo) {
+          await refreshSepayTransfer(payment._id, true);
         }
       } catch (error) {
         if (!ignore) {
           setExistingPayment(null);
-          setPaymentAlert(error?.response?.data?.message || 'Không tải được thông tin thanh toán.');
+          setPaymentAlert(getApiErrorMessage(error, 'Không tải được thông tin thanh toán.'));
         }
       } finally {
         if (!ignore) {
@@ -174,6 +321,37 @@ export default function Checkout() {
       ignore = true;
     };
   }, [orderId]);
+
+  useEffect(() => {
+    if (!existingPayment?._id || existingPayment?.method === 'cod' || isSettledPayment(existingPayment)) {
+      return undefined;
+    }
+
+    const intervalId = window.setInterval(() => {
+      fetchPaymentById(existingPayment._id, true);
+    }, PAYMENT_POLL_INTERVAL_MS);
+
+    return () => window.clearInterval(intervalId);
+  }, [existingPayment?._id, existingPayment?.method, existingPayment?.status]);
+
+  useEffect(() => {
+    if (!orderId || existingPayment?.method === 'cod' || existingPayment?.status === 'paid') {
+      return undefined;
+    }
+
+    const intervalId = window.setInterval(() => {
+      loadExistingPaymentByOrderId(true);
+    }, PAYMENT_POLL_INTERVAL_MS);
+
+    return () => window.clearInterval(intervalId);
+  }, [orderId, existingPayment?.method, existingPayment?.status]);
+
+  useEffect(() => {
+    if (existingPayment?._id && existingPayment?.status === 'paid' && !hasShownPaidAlert) {
+      setAlert({ type: 'success', message: 'Thanh toán thanh cong. He thong da cap nhat ket qua giao dich.' });
+      setHasShownPaidAlert(true);
+    }
+  }, [existingPayment?._id, existingPayment?.status, hasShownPaidAlert]);
 
   const handleAddressChange = (field, value) => {
     setAddressForm((prev) => ({ ...prev, [field]: value }));
@@ -196,11 +374,7 @@ export default function Checkout() {
       return;
     }
 
-    const newAddress = {
-      id: String(Date.now()),
-      ...addressForm
-    };
-
+    const newAddress = { id: String(Date.now()), ...addressForm };
     const next = [newAddress, ...savedAddresses].slice(0, 5);
     localStorage.setItem('savedAddresses', JSON.stringify(next));
     setSelectedAddressId(newAddress.id);
@@ -212,9 +386,7 @@ export default function Checkout() {
     if (uniqueProductIds.length === 0) return;
 
     await Promise.allSettled(
-      uniqueProductIds.map((productId) =>
-        api.delete('/cart/remove', { data: { user_id: userId, product_id: productId } })
-      )
+      uniqueProductIds.map((productId) => api.delete('/cart/remove', { data: { user_id: userId, product_id: productId } }))
     );
   };
 
@@ -225,9 +397,7 @@ export default function Checkout() {
   };
 
   const createOrReuseOrder = async (user) => {
-    if (hasExistingOrder) {
-      return checkoutSource;
-    }
+    if (hasExistingOrder) return checkoutSource;
 
     const orderPayload = {
       user_id: user._id,
@@ -285,7 +455,7 @@ export default function Checkout() {
     }
 
     if (!addressForm.recipient_name || !addressForm.phone || !addressForm.full_address) {
-      setAlert({ type: 'warning', message: 'Vui lòng nhập đầy đủ tên người nhận, SĐT và địa chỉ.' });
+      setAlert({ type: 'warning', message: 'Vui long nhap day du ten nguoi nhan, SĐT va dia chi.' });
       return;
     }
 
@@ -299,39 +469,37 @@ export default function Checkout() {
         return;
       }
 
-      if (method === 'bank' && payment?._id && !payment?.qr_image_url && !payment?.qr_data_url) {
-        await refreshVietQr(payment._id, true);
+      if (method === 'bank') {
+        await refreshSepayTransfer(payment?._id, true);
       }
 
       if (method === 'cod') {
-        setAlert({ type: 'success', message: 'Đơn hàng đã được tạo. Bạn có thể theo dõi trong Lịch sử đơn hàng.' });
+        setAlert({ type: 'success', message: 'Đơn hàng đã được tạo. Bạn có thể theo dõi trong lịch sử đơn hàng.' });
         setTimeout(() => navigate('/orders/history'), 1200);
         return;
       }
 
       setAlert({
         type: 'success',
-        message: method === 'bank'
-          ? 'Đã tạo VietQR. Vui lòng quét mã bên dưới để thanh toán.'
-          : 'Đã tạo yêu cầu thanh toán.'
+        message: 'Đã tạo thông tin chuyển khoản BIDV qua SePay. Hệ thống sẽ polling để cập nhật trạng thái.'
       });
     } catch (error) {
-      setAlert({ type: 'danger', message: error?.response?.data?.message || 'Đặt hàng hoặc tạo thanh toán thất bại. Vui lòng thử lại.' });
+      setAlert({ type: 'danger', message: getApiErrorMessage(error, 'Đặt hàng hoặc tạo thanh toán thất bại. Vui lòng thử lại.') });
     } finally {
       setLoading(false);
     }
   };
 
-  const handleRefreshQr = async () => {
-    await refreshVietQr(existingPayment?._id);
+  const handleRefreshTransfer = async () => {
+    await Promise.all([refreshSepayTransfer(existingPayment?._id), fetchPaymentById(existingPayment?._id, true)]);
   };
 
-  if (!checkoutSource || items.length === 0) {
+  if ((!checkoutSource || items.length === 0) && !existingPayment) {
     return (
       <div style={{ minHeight: '100vh', backgroundColor: 'var(--surface-secondary)' }}>
         <div className="container-lg" style={{ paddingTop: '60px' }}>
           <div style={{ backgroundColor: 'var(--surface)', padding: '60px 40px', borderRadius: '8px', textAlign: 'center' }}>
-            <div style={{ fontSize: '48px', marginBottom: '16px' }}>⚠️</div>
+            <div style={{ fontSize: '48px', marginBottom: '16px' }}>!</div>
             <h2 style={{ color: 'var(--primary-dark)', marginBottom: '12px' }}>Không có sản phẩm để thanh toán</h2>
             <p style={{ color: 'var(--muted)', marginBottom: '24px', fontSize: '16px' }}>
               Vui lòng quay lại giỏ hàng và chọn sản phẩm muốn mua
@@ -356,13 +524,23 @@ export default function Checkout() {
     );
   }
 
-  const showPaymentResult = existingPayment && !isSettledPayment(existingPayment) && existingPayment.method !== 'cod';
+  const currentOrderPayment = belongsToCurrentOrder(existingPayment, orderId);
+  const showPaymentResult =
+    Boolean(existingPayment) &&
+    existingPayment.method !== 'cod' &&
+    (currentOrderPayment || (!checkoutSource || items.length === 0));
+  const paymentSettled = isSettledPayment(existingPayment);
+  const paymentSuccessful = existingPayment?.status === 'paid';
+  const displayOrderId = orderId || existingPayment?.order_id || '';
   const statusLabel = paymentStatusMap[existingPayment?.status] || (existingPayment?.status || 'Chưa tạo');
-  const hasQr = Boolean(existingPayment?.qr_image_url || existingPayment?.qr_data_url);
-  const qrWarningMessage =
+  const transferQrImageUrl = existingPayment?.qr_image_url || buildTransferQrImageUrl(existingPayment);
+  const hasQr = Boolean(transferQrImageUrl || existingPayment?.qr_data_url);
+  const hasTransferInfo = Boolean(existingPayment?.account_no || existingPayment?.account_name || existingPayment?.description);
+  const canShowTransferBlock = isBankTransferPayment(existingPayment) && !paymentSuccessful && (hasQr || hasTransferInfo);
+  const transferWarningMessage =
     paymentAlert ||
     existingPayment?.metadata?.integration_message ||
-    'Chưa lấy được mã QR. Hãy bấm Tải lại VietQR để thử lại sau khi kiểm tra cấu hình backend.';
+    'Chưa tải được thông tin chuyển khoản. Hãy bấm tải lại SePay sau khi kiểm tra cấu hình backend.';
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: 'var(--surface-secondary)' }}>
@@ -382,21 +560,15 @@ export default function Checkout() {
         <div style={{ marginBottom: '24px' }}>
           <h1 style={{ fontSize: '32px', marginBottom: '8px', color: 'var(--primary-dark)' }}>Xác nhận đơn hàng</h1>
           <p style={{ color: 'var(--muted)', fontSize: '16px', margin: 0 }}>
-            {showPaymentResult ? 'Thông tin thanh toán cho đơn hàng của bạn' : 'Kiểm tra giỏ hàng, nhập địa chỉ và chọn phương thức thanh toán'}
+            {showPaymentResult
+              ? 'Hệ thống đang tự động polling trạng thái thanh toán cho đơn hàng của bạn'
+              : 'Kiểm tra giỏ hàng, nhập địa chỉ và chọn phương thức thanh toán'}
           </p>
         </div>
 
-        {alert && (
-          <div className={`alert alert-${alert.type}`} style={{ marginBottom: '20px' }}>
-            {alert.message}
-          </div>
-        )}
+        {alert && <div className={`alert alert-${alert.type}`} style={{ marginBottom: '20px' }}>{alert.message}</div>}
 
-        {paymentAlert && (
-          <div className="alert alert-warning" style={{ marginBottom: '20px' }}>
-            {paymentAlert}
-          </div>
-        )}
+        {paymentAlert && <div className="alert alert-warning" style={{ marginBottom: '20px' }}>{paymentAlert}</div>}
 
         <form onSubmit={handlePlaceOrder} style={{ display: 'grid', gridTemplateColumns: '1fr 400px', gap: '24px' }}>
           <div style={{ display: 'grid', gap: '16px' }}>
@@ -446,31 +618,15 @@ export default function Checkout() {
               <div className="row g-2">
                 <div className="col-12 col-md-6">
                   <label style={{ display: 'block', fontSize: '14px', marginBottom: '6px' }}>Tên người nhận</label>
-                  <input
-                    className="form-control"
-                    value={addressForm.recipient_name}
-                    onChange={(e) => handleAddressChange('recipient_name', e.target.value)}
-                    placeholder="Nhập tên người nhận"
-                  />
+                  <input className="form-control" value={addressForm.recipient_name} onChange={(e) => handleAddressChange('recipient_name', e.target.value)} />
                 </div>
                 <div className="col-12 col-md-6">
                   <label style={{ display: 'block', fontSize: '14px', marginBottom: '6px' }}>SĐT</label>
-                  <input
-                    className="form-control"
-                    value={addressForm.phone}
-                    onChange={(e) => handleAddressChange('phone', e.target.value)}
-                    placeholder="Nhập số điện thoại"
-                  />
+                  <input className="form-control" value={addressForm.phone} onChange={(e) => handleAddressChange('phone', e.target.value)} />
                 </div>
                 <div className="col-12">
                   <label style={{ display: 'block', fontSize: '14px', marginBottom: '6px' }}>Địa chỉ cụ thể</label>
-                  <textarea
-                    className="form-control"
-                    rows={3}
-                    value={addressForm.full_address}
-                    onChange={(e) => handleAddressChange('full_address', e.target.value)}
-                    placeholder="Số nhà, đường, phường/xã, quận/huyện, tỉnh/thành"
-                  />
+                  <textarea className="form-control" rows={3} value={addressForm.full_address} onChange={(e) => handleAddressChange('full_address', e.target.value)} />
                 </div>
               </div>
 
@@ -499,13 +655,7 @@ export default function Checkout() {
                         cursor: 'pointer'
                       }}
                     >
-                      <input
-                        type="radio"
-                        name="paymentMethod"
-                        value={item.id}
-                        checked={method === item.id}
-                        onChange={(e) => setMethod(e.target.value)}
-                      />
+                      <input type="radio" name="paymentMethod" value={item.id} checked={method === item.id} onChange={(e) => setMethod(e.target.value)} />
                       <span style={{ fontSize: '20px' }}>{item.icon}</span>
                       <span>{item.name}</span>
                     </label>
@@ -515,61 +665,53 @@ export default function Checkout() {
 
               {showPaymentResult && (
                 <div style={{ display: 'grid', gap: '16px' }}>
-                  <div
-                    style={{
-                      border: '1px solid var(--border)',
-                      borderRadius: '8px',
-                      padding: '14px',
-                      background: 'var(--surface-secondary)'
-                    }}
-                  >
+                  <div style={{ border: '1px solid var(--border)', borderRadius: '8px', padding: '14px', background: 'var(--surface-secondary)' }}>
                     <div><strong>Trạng thái:</strong> {statusLabel}</div>
                     <div><strong>Phương thức:</strong> {existingPayment?.provider || existingPayment?.method}</div>
-                    {existingPayment?.order_code ? <div><strong>Mã PayOS:</strong> {existingPayment.order_code}</div> : null}
+                    {existingPayment?.paid_amount ? <div><strong>Số tiền đã nhận:</strong> {formatPrice(existingPayment.paid_amount)}</div> : null}
+                    {existingPayment?.paid_at ? <div><strong>Thời gian thanh toán:</strong> {formatDateTime(existingPayment.paid_at)}</div> : null}
+                    {existingPayment?.transaction_id ? <div><strong>Mã giao dịch:</strong> {existingPayment.transaction_id}</div> : null}
+                    {existingPayment?.bank_transaction_id ? <div><strong>Mã GD ngân hàng:</strong> {existingPayment.bank_transaction_id}</div> : null}
                   </div>
 
-                  {paymentLoading && !hasQr && (
-                    <div className="alert alert-info" style={{ marginBottom: 0 }}>
-                      Đang tải mã QR thanh toán...
+                  {paymentSuccessful && (
+                    <div className="alert alert-success" style={{ marginBottom: 0 }}>
+                      Thanh toán đã hoàn tất và được lưu vào hệ thống.
                     </div>
                   )}
 
-                  {hasQr && (
-                    <div
-                      style={{
-                        border: '1px solid var(--border)',
-                        borderRadius: '8px',
-                        padding: '16px',
-                        textAlign: 'center'
-                      }}
-                    >
-                      <div style={{ fontWeight: 700, marginBottom: '12px' }}>Mã VietQR</div>
-                      {existingPayment.qr_image_url ? (
+                  {paymentLoading && !paymentSettled && (
+                    <div className="alert alert-info" style={{ marginBottom: 0 }}>
+                      Đang đồng bộ trạng thái thanh toán...
+                    </div>
+                  )}
+
+                  {canShowTransferBlock && (
+                    <div style={{ border: '1px solid var(--border)', borderRadius: '8px', padding: '16px', textAlign: 'center' }}>
+                      <div style={{ fontWeight: 700, marginBottom: '12px' }}>Thông tin chuyển khoản SePay</div>
+                      {hasQr && transferQrImageUrl ? (
                         <img
-                          src={existingPayment.qr_image_url}
-                          alt="VietQR"
+                          src={transferQrImageUrl}
+                          alt="SePay QR"
                           style={{ width: '100%', maxWidth: '320px', borderRadius: '8px', border: '1px solid var(--border-light)' }}
                         />
                       ) : null}
-                      {existingPayment.qr_data_url ? (
-                        <div style={{ marginTop: '12px', wordBreak: 'break-all', fontSize: '12px', color: 'var(--muted)' }}>
-                          {existingPayment.qr_data_url}
-                        </div>
-                      ) : null}
-                      <div style={{ marginTop: '12px', fontSize: '14px' }}>
+                      <div style={{ marginTop: '12px', fontSize: '14px', textAlign: 'left' }}>
                         <div><strong>Ngân hàng:</strong> {getBankDisplayName(existingPayment.acq_id)}</div>
                         <div><strong>Số tài khoản:</strong> {existingPayment.account_no || '-'}</div>
                         <div><strong>Tên tài khoản:</strong> {existingPayment.account_name || '-'}</div>
+                        <div><strong>Nội dung CK:</strong> {existingPayment.description || '-'}</div>
+                        <div><strong>Số tiền:</strong> {formatPrice(existingPayment.amount)}</div>
                       </div>
-                      <button type="button" className="btn btn-outline-primary mt-3" onClick={handleRefreshQr} disabled={paymentLoading}>
-                        {paymentLoading ? 'Đang tải QR...' : 'Tải lại VietQR'}
+                      <button type="button" className="btn btn-outline-primary mt-3" onClick={handleRefreshTransfer} disabled={paymentLoading}>
+                        {paymentLoading ? 'Đang tải...' : 'Tải lại SePay'}
                       </button>
                     </div>
                   )}
 
-                  {!paymentLoading && !hasQr && (existingPayment?.provider === 'vietqr' || existingPayment?.method === 'vietqr' || method === 'bank') && (
+                  {!paymentLoading && !paymentSettled && !hasQr && !hasTransferInfo && isBankTransferPayment(existingPayment) && (
                     <div className="alert alert-warning" style={{ marginBottom: 0 }}>
-                      {qrWarningMessage}
+                      {transferWarningMessage}
                     </div>
                   )}
 
@@ -599,9 +741,9 @@ export default function Checkout() {
             <div style={{ backgroundColor: 'var(--surface)', borderRadius: '8px', padding: '20px', boxShadow: 'var(--shadow)' }}>
               <h3 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--primary-dark)', marginBottom: '16px' }}>Tóm tắt thanh toán</h3>
 
-              {hasExistingOrder && (
+              {displayOrderId && (
                 <div style={{ fontSize: '13px', color: 'var(--muted)', marginBottom: '12px' }}>
-                  Mã đơn hàng: <strong>{orderId}</strong>
+                  Mã đơn hàng: <strong>{displayOrderId}</strong>
                 </div>
               )}
 
@@ -638,17 +780,15 @@ export default function Checkout() {
                     cursor: loading ? 'not-allowed' : 'pointer'
                   }}
                 >
-                  {loading
-                    ? 'Đang xử lý...'
-                    : hasExistingOrder
-                      ? 'Thanh toán đơn hàng này'
-                      : 'Đặt hàng và thanh toán'}
+                  {loading ? 'Đang xử lý...' : hasExistingOrder ? 'Thanh toán đơn hàng này' : 'Đặt hàng và thanh toán'}
                 </button>
               )}
 
               {showPaymentResult && (
                 <div style={{ marginTop: '16px', fontSize: '13px', color: 'var(--muted)' }}>
-                  Nếu bạn đã chuyển khoản, hãy refresh trạng thái sau khi giao dịch hoàn tất.
+                  {paymentSuccessful
+                    ? 'Kết quả thanh toán đang được hiển thị tự động từ payment-service.'
+                    : 'Trang này đang polling payment-service định kỳ sau khi bạn chuyển khoản.'}
                 </div>
               )}
             </div>
@@ -658,3 +798,5 @@ export default function Checkout() {
     </div>
   );
 }
+
+

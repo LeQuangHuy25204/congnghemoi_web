@@ -59,7 +59,7 @@ cd backend/api-gateway; npm run dev
   - GET /api/payment
   - GET /api/payment/:id
   - PATCH /api/payment/:id/status
-  - GET /api/payment/:id/vietqr
+  - GET /api/payment/:id/sepay
 - Chatbot: POST /api/chat
 - Support: POST /api/support/ticket, GET /api/support/tickets/:user_id
 
@@ -91,14 +91,23 @@ Important: JWT_SECRET in backend/api-gateway/.env must be the same as JWT_SECRET
 Copy `backend/service/payment-service/.env.example` to `.env` and fill credentials if you want real integrations:
 
 - `PAYOS_CLIENT_ID`, `PAYOS_API_KEY`, `PAYOS_CHECKSUM_KEY`, `PAYOS_RETURN_URL`, `PAYOS_CANCEL_URL`
-- `VIETQR_BANK_ID`, `VIETQR_ACCOUNT_NO`, `VIETQR_ACCOUNT_NAME`
-- Optional: `VIETQR_CLIENT_ID`, `VIETQR_API_KEY` for full VietQR API response (`qrCode`, `qrDataURL`)
+- `SEPAY_API_TOKEN`
+- Optional but recommended: `SEPAY_BANK_ACCOUNT_ID`
+- Fallback account config: `SEPAY_BANK_SHORT_NAME`, `SEPAY_BANK_BIN`, `SEPAY_ACCOUNT_NUMBER`, `SEPAY_ACCOUNT_NAME`
+- QR rendering options for SePay transfer: `VIETQR_IMAGE_BASE_URL`, `VIETQR_TEMPLATE`
 
 Method mapping in payment-service:
 
 - `cod` -> local COD payment
 - `momo` or `payos` -> PayOS payment link
-- `bank` or `vietqr` -> VietQR
+- `bank`, `sepay`, or `vietqr` -> SePay bank transfer with QR image
+
+SePay confirmation:
+
+- `GET /api/payment/:id/sepay` refreshes transfer info and QR for the payment
+- `GET /api/payment/:id` polls SePay transactions and updates the payment to `paid` when a matching transfer is found
+- The service updates MongoDB `payment_db`, stores the matched transfer result, and returns the latest `payment`
+
 
 ## 8) Run with Docker while keeping MongoDB on your machine
 

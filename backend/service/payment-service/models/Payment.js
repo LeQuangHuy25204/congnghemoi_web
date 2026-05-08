@@ -1,7 +1,7 @@
 const mongoose = require("mongoose");
 
-const PAYMENT_METHODS = ["cod", "bank", "momo", "payos", "vietqr"];
-const PAYMENT_PROVIDERS = ["cod", "payos", "vietqr", "manual"];
+const PAYMENT_METHODS = ["cod", "bank", "momo", "payos", "sepay", "vietqr"];
+const PAYMENT_PROVIDERS = ["cod", "payos", "sepay", "vietqr", "manual"];
 const PAYMENT_STATUSES = ["pending", "processing", "paid", "failed", "cancelled", "expired", "refunded"];
 
 const paymentSchema = new mongoose.Schema(
@@ -22,9 +22,14 @@ const paymentSchema = new mongoose.Schema(
     account_name: { type: String, default: "" },
     account_no: { type: String, default: "" },
     acq_id: { type: String, default: "" },
+    paid_amount: { type: Number, default: 0, min: 0 },
+    paid_at: { type: Date, default: null },
+    transaction_id: { type: String, default: "", index: true },
+    bank_transaction_id: { type: String, default: "" },
     metadata: { type: mongoose.Schema.Types.Mixed, default: {} },
     payos_data: { type: mongoose.Schema.Types.Mixed, default: {} },
-    vietqr_data: { type: mongoose.Schema.Types.Mixed, default: {} }
+    vietqr_data: { type: mongoose.Schema.Types.Mixed, default: {} },
+    payment_result: { type: mongoose.Schema.Types.Mixed, default: {} }
   },
   { timestamps: true }
 );
