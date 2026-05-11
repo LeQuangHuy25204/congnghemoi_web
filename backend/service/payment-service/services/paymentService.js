@@ -90,7 +90,9 @@ const toDateTimeParam = (value) => {
 const parseSepayDate = (value) => {
   const normalized = normalizeText(value);
   if (!normalized) return null;
-  const parsed = new Date(normalized.replace(" ", "T"));
+  const hasTimezone = /(?:Z|[+-]\d{2}:\d{2})$/i.test(normalized);
+  const isoLike = normalized.replace(" ", "T");
+  const parsed = new Date(hasTimezone ? isoLike : `${isoLike}+07:00`);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
@@ -181,6 +183,15 @@ const getSepayManualAccountConfig = () => ({
   bankBin: normalizeText(process.env.SEPAY_BANK_BIN || SEPAY_BANK_BIN),
   bankShortName: normalizeText(process.env.SEPAY_BANK_SHORT_NAME || SEPAY_BANK_SHORT_NAME)
 });
+const getSepayVirtualAccountConfig = () => ({
+  accountNo: normalizeText(process.env.SEPAY_VA_ACCOUNT_NUMBER),
+  accountName: normalizeText(process.env.SEPAY_VA_ACCOUNT_NAME),
+  bankBin: normalizeText(process.env.SEPAY_VA_BANK_BIN || process.env.SEPAY_BANK_BIN || SEPAY_BANK_BIN),
+  bankShortName: normalizeText(process.env.SEPAY_VA_BANK_SHORT_NAME || process.env.SEPAY_BANK_SHORT_NAME || SEPAY_BANK_SHORT_NAME),
+  label: normalizeText(process.env.SEPAY_VA_LABEL),
+  id: normalizeText(process.env.SEPAY_VA_ID)
+});
+const hasSepayVirtualAccountConfig = (config) => Boolean(config?.accountNo && config?.bankBin);
 const hasSepayManualAccountConfig = (config) => Boolean(config?.accountNo && config?.accountName && config?.bankBin);
 const buildManualSepayBankAccount = (config) => ({
   enabled: true,
@@ -459,7 +470,18 @@ const applySepayMatch = async (payment, transaction, rawList) => {
 const pickSepayTransaction = (payment, transactions) => {
   const descriptionKey = normalizeLooseText(payment.description);
   const descriptionToken = normalizeText(payment.description).replace(/[^a-zA-Z0-9]/g, "").slice(-8).toLowerCase();
-  const expectedAccountNo = normalizeText(payment.account_no || process.env.SEPAY_ACCOUNT_NUMBER);
+  const expectedAccountNo = normalizeText(process.env.SEPAY_ACCOUNT_NUMBER);
+  const expectedVirtualAccountNo = normalizeText(
+    payment.vietqr_data?.virtual_account?.account_no ||
+      payment.vietqr_data?.virtual_account_number ||
+      process.env.SEPAY_VA_ACCOUNT_NUMBER ||
+      payment.account_no
+  );
+  const expectedVirtualAccountId = normalizeText(
+    payment.vietqr_data?.virtual_account?.id ||
+      payment.vietqr_data?.virtual_account_id ||
+      process.env.SEPAY_VA_ID
+  );
   const expectedBankAccountId = normalizeText(
     payment.payment_link_id ||
       payment.vietqr_data?.bank_account_id ||
@@ -473,8 +495,12 @@ const pickSepayTransaction = (payment, transactions) => {
     .map((item) => {
       const content = normalizeLooseText(item.transaction_content);
       const accountNumberMatches = !expectedAccountNo || normalizeText(item.account_number) === expectedAccountNo;
+      const virtualAccountNumberMatches =
+        Boolean(expectedVirtualAccountNo) && normalizeText(item.va) === expectedVirtualAccountNo;
+      const virtualAccountIdMatches = Boolean(expectedVirtualAccountId) && normalizeText(item.va_id) === expectedVirtualAccountId;
       const bankAccountIdMatches = Boolean(expectedBankAccountId) && normalizeText(item.bank_account_id) === expectedBankAccountId;
-      const accountMatches = accountNumberMatches || bankAccountIdMatches;
+      const accountMatches =
+        accountNumberMatches || bankAccountIdMatches || virtualAccountNumberMatches || virtualAccountIdMatches;
       const contentMatchesDescription = !descriptionKey || content.includes(descriptionKey);
       const contentMatchesToken = Boolean(descriptionToken) && content.includes(descriptionToken);
       const paidAt = parseSepayDate(item.transaction_date);
@@ -482,6 +508,8 @@ const pickSepayTransaction = (payment, transactions) => {
 
       let score = 0;
       if (accountNumberMatches) score += 3;
+      if (virtualAccountNumberMatches) score += 5;
+      if (virtualAccountIdMatches) score += 5;
       if (bankAccountIdMatches) score += 4;
       if (contentMatchesDescription) score += 4;
       if (contentMatchesToken) score += 5;
@@ -492,6 +520,8 @@ const pickSepayTransaction = (payment, transactions) => {
         score,
         accountMatches,
         accountNumberMatches,
+        virtualAccountNumberMatches,
+        virtualAccountIdMatches,
         bankAccountIdMatches,
         contentMatchesDescription,
         contentMatchesToken,
@@ -521,7 +551,13 @@ const fetchSepayTransactionsForPayment = async (payment) => {
   const lookbackDate = new Date(Date.now() - SEPAY_POLL_LOOKBACK_MINUTES * 60 * 1000);
   const transactionDateFrom = toDateTimeParam(payment.createdAt > lookbackDate ? payment.createdAt : lookbackDate);
   const bankAccountId = normalizeText(process.env.SEPAY_BANK_ACCOUNT_ID);
-  const expectedAccountNo = normalizeText(payment.account_no || process.env.SEPAY_ACCOUNT_NUMBER);
+  const expectedAccountNo = normalizeText(process.env.SEPAY_ACCOUNT_NUMBER);
+  const expectedVirtualAccountNo = normalizeText(
+    payment.vietqr_data?.virtual_account?.account_no ||
+      payment.vietqr_data?.virtual_account_number ||
+      process.env.SEPAY_VA_ACCOUNT_NUMBER ||
+      payment.account_no
+  );
   const baseQuery = {
     amount_in_min: payment.amount,
     amount_in_max: payment.amount,
@@ -545,6 +581,10 @@ const fetchSepayTransactionsForPayment = async (payment) => {
     {
       q: payment.description,
       ...(bankAccountId ? { bank_account_id: bankAccountId } : {})
+    },
+    {
+      ...(expectedVirtualAccountNo ? { q: expectedVirtualAccountNo } : {}),
+      per_page: 100
     },
     {
       ...(expectedAccountNo ? { q: expectedAccountNo } : {}),
@@ -698,9 +738,17 @@ const buildSepayTransferInfo = async ({ amount, description }) => {
     return bankAccount;
   }
 
-  const accountName = normalizeText(bankAccount.data?.account_holder_name || process.env.SEPAY_ACCOUNT_NAME);
-  const accountNo = normalizeText(bankAccount.data?.account_number || process.env.SEPAY_ACCOUNT_NUMBER);
-  const acqId = normalizeText(bankAccount.data?.bank_bin || SEPAY_BANK_BIN);
+  const virtualAccount = getSepayVirtualAccountConfig();
+  const useVirtualAccount = hasSepayVirtualAccountConfig(virtualAccount);
+  const accountName = normalizeText(
+    (useVirtualAccount ? virtualAccount.accountName : "") || bankAccount.data?.account_holder_name || process.env.SEPAY_ACCOUNT_NAME
+  );
+  const accountNo = normalizeText((useVirtualAccount ? virtualAccount.accountNo : "") || bankAccount.data?.account_number || process.env.SEPAY_ACCOUNT_NUMBER);
+  const acqId = normalizeText((useVirtualAccount ? virtualAccount.bankBin : "") || bankAccount.data?.bank_bin || SEPAY_BANK_BIN);
+  const bankShortName = normalizeText(
+    (useVirtualAccount ? virtualAccount.bankShortName : "") || bankAccount.data?.bank_short_name || SEPAY_BANK_SHORT_NAME
+  );
+  const bankFullName = normalizeText(bankAccount.data?.bank_full_name || bankShortName);
   const addInfo = sanitizeDescription(description);
   const qrImageURL = buildVietQrImageUrl({
     bankId: acqId,
@@ -718,8 +766,16 @@ const buildSepayTransferInfo = async ({ amount, description }) => {
       accountName,
       accountNo,
       acqId,
-      bankShortName: normalizeText(bankAccount.data?.bank_short_name || SEPAY_BANK_SHORT_NAME),
-      bankFullName: normalizeText(bankAccount.data?.bank_full_name),
+      bankShortName,
+      bankFullName,
+      virtualAccount: useVirtualAccount
+        ? {
+            id: virtualAccount.id,
+            label: virtualAccount.label,
+            accountNo,
+            accountName
+          }
+        : null,
       addInfo,
       amount,
       qrCode: qrImageURL,
@@ -821,6 +877,9 @@ const createPayment = async (payload, actorUserId, actorRole) => {
         bank_full_name: sepay.data?.bankFullName,
         addInfo: sepay.data?.addInfo,
         bank_account_id: sepay.data?.bankAccountId,
+        virtual_account: sepay.data?.virtualAccount || null,
+        virtual_account_id: sepay.data?.virtualAccount?.id || "",
+        virtual_account_number: sepay.data?.virtualAccount?.accountNo || "",
         polling: true
       };
       baseUpdate.metadata = { ...baseUpdate.metadata, integration_ready: true, integration_message: null, polling: true };
@@ -977,6 +1036,9 @@ const getPaymentSepay = async (id, actorUserId, actorRole) => {
         bank_full_name: sepay.data?.bankFullName,
         addInfo: sepay.data?.addInfo,
         bank_account_id: sepay.data?.bankAccountId,
+        virtual_account: sepay.data?.virtualAccount || null,
+        virtual_account_id: sepay.data?.virtualAccount?.id || "",
+        virtual_account_number: sepay.data?.virtualAccount?.accountNo || "",
         polling: true
       },
       metadata: {
