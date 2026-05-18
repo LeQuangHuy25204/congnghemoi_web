@@ -456,7 +456,7 @@ export default function ProductList() {
     <div style={{ display: 'grid', gap: '24px', paddingBottom: '28px' }}>
       <WelcomeHero
         eyebrow="Sản phẩm"
-        title="Chào mừng bạn đến khu trưng bày sản phẩm của ShopHub."
+        title="Chào mừng bạn đến khu trưng bày sản phẩm của ShopHub"
         description=""
         primaryAction={{ to: '/products', label: 'Xem sản phẩm mới' }}
         secondaryAction={{ to: '/', label: 'Về trang chủ' }}

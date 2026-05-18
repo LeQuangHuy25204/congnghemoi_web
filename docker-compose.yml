@@ -70,6 +70,8 @@ services:
       args:
         SERVICE_PATH: backend/service/payment-service
         NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org/}
+    env_file:
+      - ./backend/service/payment-service/.env
     environment:
       PORT: 5005
       MONGO_URI: mongodb://${MONGO_HOST:-host.docker.internal}:${MONGO_PORT:-27017}/payment_db

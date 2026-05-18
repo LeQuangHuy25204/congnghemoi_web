@@ -12,7 +12,7 @@ exports.createPayment = async (req, res) => {
     return res.status(result.status).json(result.body);
   } catch (error) {
     return res.status(error.status || 500).json({
-      message: "Payment failed",
+      message: error?.data?.message || error.message || "Payment failed",
       error: error.data || error.message
     });
   }
@@ -46,11 +46,14 @@ exports.updatePaymentStatus = async (req, res) => {
   }
 };
 
-exports.getPaymentVietQr = async (req, res) => {
+exports.getPaymentSepay = async (req, res) => {
   try {
-    const result = await paymentService.getPaymentVietQr(req.params.id, req.headers["x-user-id"], req.headers["x-user-role"]);
+    const result = await paymentService.getPaymentSepay(req.params.id, req.headers["x-user-id"], req.headers["x-user-role"]);
     return res.status(result.status).json(result.body);
   } catch (error) {
-    return res.status(error.status || 500).json({ message: "Get VietQR failed", error: error.data || error.message });
+    return res.status(error.status || 500).json({
+      message: error?.data?.message || error.message || "Get SePay transfer failed",
+      error: error.data || error.message
+    });
   }
 };
