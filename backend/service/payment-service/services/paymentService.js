@@ -1006,12 +1006,13 @@ const updatePaymentStatus = async (id, nextStatus, actorRole) => {
       const orderServiceUrl = process.env.ORDER_SERVICE_URL || "http://localhost:5004";
       const axios = require("axios");
       await axios.put(
-        `${orderServiceUrl}/api/orders/${payment.order_id}/status`,
+        `${orderServiceUrl}/api/orders/internal/${payment.order_id}/status`,
         { status: "paid" },
         { timeout: 5000 }
       );
+      console.log(`✅ Order ${payment.order_id} status updated to 'paid'`);
     } catch (error) {
-      console.warn(`Failed to update order status for order ${payment.order_id}:`, error.message);
+      console.warn(`⚠️  Failed to update order status for order ${payment.order_id}:`, error.message);
       // Don't fail payment update if order update fails
     }
   }

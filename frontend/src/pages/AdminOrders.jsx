@@ -116,6 +116,24 @@ const AdminOrders = () => {
     }, 300);
   };
 
+  const handleModalOverlayClick = (e) => {
+    if (e.target === e.currentTarget) {
+      handleCloseModal();
+    }
+  };
+
+  useEffect(() => {
+    const handleEscKey = (e) => {
+      if (e.key === 'Escape' && showModal) {
+        handleCloseModal();
+      }
+    };
+    if (showModal) {
+      document.addEventListener('keydown', handleEscKey);
+      return () => document.removeEventListener('keydown', handleEscKey);
+    }
+  }, [showModal]);
+
   const handleUpdateStatusInModal = async () => {
     if (tempStatus === selectedOrder.status) {
       setError('Trạng thái mới phải khác trạng thái hiện tại');
@@ -252,8 +270,8 @@ const AdminOrders = () => {
                         {(o._id || o.id)?.slice(-8)}
                       </span>
                     </td>
-                    <td style={{ padding: '12px', fontSize: '13px' }}>
-                      {o.user_id?.slice(-6) || '—'}
+                    <td style={{ padding: '12px', fontSize: '13px', fontWeight: 600 }}>
+                      {o.customer_name || o.user_id?.slice(-6) || '—'}
                     </td>
                     <td style={{ padding: '12px', fontSize: '14px', fontWeight: 600, color: 'var(--primary)' }}>
                       {formatMoney(o.total_price || o.total || 0)} đ
@@ -381,6 +399,8 @@ const AdminOrders = () => {
           }}
         >
           Cuối ⬆
+        </button>
+      </div>
 
       {/* Modal Chi tiết đơn hàng */}
       {showModal && (
@@ -398,7 +418,7 @@ const AdminOrders = () => {
             zIndex: 1000,
             animation: 'fadeIn 0.3s ease'
           }}
-          onClick={handleCloseModal}
+          onClick={handleModalOverlayClick}
         >
           <div 
             style={{
@@ -427,6 +447,7 @@ const AdminOrders = () => {
                 📋 Chi tiết đơn hàng
               </h2>
               <button
+                type="button"
                 onClick={handleCloseModal}
                 style={{
                   background: 'none',
@@ -591,6 +612,7 @@ const AdminOrders = () => {
               borderRadius: '0 0 12px 12px'
             }}>
               <button
+                type="button"
                 onClick={handleCloseModal}
                 style={{
                   padding: '10px 16px',
@@ -620,8 +642,6 @@ const AdminOrders = () => {
           to { transform: translateY(0); opacity: 1; }
         }
       `}</style>
-        </button>
-      </div>
     </div>
   );
 };

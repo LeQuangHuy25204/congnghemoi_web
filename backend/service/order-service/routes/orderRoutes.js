@@ -19,6 +19,7 @@ router.get("/orders/admin/:id", getOrderAdmin);
 router.put("/orders/admin/:id/status", updateOrderStatusAdmin);
 router.put("/orders/admin/:id", updateOrderAdmin);
 router.delete("/orders/admin/:id", deleteOrderAdmin);
+router.put("/orders/internal/:id/status", updateOrderStatusAdmin); // Internal: for payment service
 router.put("/orders/:id/status", updateOrderStatus);
 
 module.exports = router;

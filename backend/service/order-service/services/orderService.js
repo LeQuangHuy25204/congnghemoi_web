@@ -103,6 +103,7 @@ const getOrdersAdmin = async ({ status, q, page = 1, limit = 20 }) => {
   if (keyword) {
     const orFilters = [
       { user_id: { $regex: keyword, $options: "i" } },
+      { customer_name: { $regex: keyword, $options: "i" } },
       { "items.product_name": { $regex: keyword, $options: "i" } }
     ];
     if (mongoose.Types.ObjectId.isValid(keyword)) {
