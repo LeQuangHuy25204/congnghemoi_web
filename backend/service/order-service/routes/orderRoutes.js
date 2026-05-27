@@ -6,7 +6,8 @@ const {
 	updateOrderStatusAdmin,
 	getOrderAdmin,
 	updateOrderAdmin,
-	deleteOrderAdmin
+	deleteOrderAdmin,
+	updateOrderStatus
 } = require("../controllers/orderController");
 
 const router = express.Router();
@@ -18,5 +19,6 @@ router.get("/orders/admin/:id", getOrderAdmin);
 router.put("/orders/admin/:id/status", updateOrderStatusAdmin);
 router.put("/orders/admin/:id", updateOrderAdmin);
 router.delete("/orders/admin/:id", deleteOrderAdmin);
+router.put("/orders/:id/status", updateOrderStatus);
 
 module.exports = router;

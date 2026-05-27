@@ -3,7 +3,9 @@ const orderService = require("../services/orderService");
 exports.createOrder = async (req, res) => {
   try {
     const actorUserId = req.headers["x-user-id"];
-    const result = await orderService.createOrder(req.body, actorUserId);
+    const customerName = req.headers["x-user-name"] || "";
+    const customerEmail = req.headers["x-user-email"] || "";
+    const result = await orderService.createOrder(req.body, actorUserId, { customerName, customerEmail });
     return res.status(result.status).json(result.body);
   } catch (error) {
     return res.status(500).json({ message: "Create order failed", error: error.message });
@@ -62,5 +64,15 @@ exports.deleteOrderAdmin = async (req, res) => {
     return res.status(result.status).json(result.body);
   } catch (error) {
     return res.status(500).json({ message: "Delete order failed", error: error.message });
+  }
+};
+
+exports.updateOrderStatus = async (req, res) => {
+  try {
+    const actorUserId = req.headers["x-user-id"];
+    const result = await orderService.updateOrderStatus(req.params.id, req.body.status, actorUserId);
+    return res.status(result.status).json(result.body);
+  } catch (error) {
+    return res.status(500).json({ message: "Update order failed", error: error.message });
   }
 };

@@ -1000,6 +1000,22 @@ const updatePaymentStatus = async (id, nextStatus, actorRole) => {
     return { status: 404, body: { message: "Payment not found" } };
   }
 
+  // Auto-update order status to "paid" when payment succeeds
+  if (normalizedStatus === "succeeded" && payment.order_id) {
+    try {
+      const orderServiceUrl = process.env.ORDER_SERVICE_URL || "http://localhost:5004";
+      const axios = require("axios");
+      await axios.put(
+        `${orderServiceUrl}/api/orders/${payment.order_id}/status`,
+        { status: "paid" },
+        { timeout: 5000 }
+      );
+    } catch (error) {
+      console.warn(`Failed to update order status for order ${payment.order_id}:`, error.message);
+      // Don't fail payment update if order update fails
+    }
+  }
+
   return { status: 200, body: serializePaymentResponse(payment) };
 };
 

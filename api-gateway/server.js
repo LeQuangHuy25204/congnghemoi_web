@@ -70,6 +70,13 @@ const requireAdmin = (req, res, next) => {
   return next();
 };
 
+const requireAdminOrEmployee = (req, res, next) => {
+  if (!req.user || (req.user.role !== "admin" && req.user.role !== "employee")) {
+    return res.status(403).json({ message: "Admin or Employee role is required" });
+  }
+  return next();
+};
+
 const resolveUserId = (user) => {
   if (!user) return "";
   return user.userId || user.id || user._id || user.sub || "";
@@ -99,7 +106,7 @@ const productAccessControl = (req, res, next) => {
 
 const orderAccessControl = (req, res, next) => {
   if (req.path.startsWith("/admin")) {
-    return requireAdmin(req, res, next);
+    return requireAdminOrEmployee(req, res, next);
   }
 
   return next();
@@ -152,11 +159,19 @@ app.use(
         const tokenUser = resolveUserFromToken(authHeader);
         const userId = resolveUserId(req.user) || tokenUser.userId || "";
         const role = req.user?.role || tokenUser.role || "customer";
+        const userName = req.user?.name || req.user?.email || "";
+        const userEmail = req.user?.email || "";
         if (userId) {
           proxyReq.setHeader("x-user-id", userId);
         }
         if (role) {
           proxyReq.setHeader("x-user-role", role);
+        }
+        if (userName) {
+          proxyReq.setHeader("x-user-name", userName);
+        }
+        if (userEmail) {
+          proxyReq.setHeader("x-user-email", userEmail);
         }
       }
     }
