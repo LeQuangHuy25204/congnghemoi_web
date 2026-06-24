@@ -13,11 +13,13 @@ const itemSchema = new mongoose.Schema(
 const orderSchema = new mongoose.Schema(
   {
     user_id: { type: String, required: true, index: true },
+    customer_name: { type: String, default: "" },
+    customer_email: { type: String, default: "" },
     items: { type: [itemSchema], required: true },
     total_price: { type: Number, required: true, min: 0 },
     status: {
       type: String,
-      enum: ["pending", "confirmed", "shipping", "completed", "cancelled"],
+      enum: ["pending", "confirmed", "paid", "shipping", "completed", "cancelled"],
       default: "pending"
     }
   },

@@ -263,19 +263,6 @@ export default function Checkout() {
   };
 
   useEffect(() => {
-    if (!orderId) {
-      setHasShownPaidAlert(false);
-      loadLatestUserPayment(true).then((payment) => {
-        if (payment) {
-          setExistingPayment(payment);
-          if (payment?.method) {
-            setMethod(mapPaymentMethodToView(payment.method));
-          }
-        }
-      });
-      return undefined;
-    }
-
     let ignore = false;
 
     const loadExistingPayment = async () => {
@@ -285,24 +272,28 @@ export default function Checkout() {
         const orderPayment = await loadExistingPaymentByOrderId(true);
         if (ignore) return;
 
-        const latestPayment = await loadLatestUserPayment(true);
-        if (ignore) return;
-
-        const payment = choosePreferredPayment(orderPayment, latestPayment);
-        if (payment) {
-          setExistingPayment(payment);
-          if (payment?.method) {
-            setMethod(mapPaymentMethodToView(payment.method));
+        // Nếu có orderId, chỉ load payment của order đó, không load payment cũ
+        if (orderId && orderPayment) {
+          setExistingPayment(orderPayment);
+          if (orderPayment?.method) {
+            setMethod(mapPaymentMethodToView(orderPayment.method));
           }
+
+          const needsTransferInfo =
+            orderPayment?._id &&
+            isBankTransferPayment(orderPayment) &&
+            (!orderPayment?.account_no || !orderPayment?.account_name || !orderPayment?.qr_image_url);
+
+          if (needsTransferInfo) {
+            await refreshSepayTransfer(orderPayment._id, true);
+          }
+          return;
         }
 
-        const needsTransferInfo =
-          payment?._id &&
-          isBankTransferPayment(payment) &&
-          (!payment?.account_no || !payment?.account_name || !payment?.qr_image_url);
-
-        if (needsTransferInfo) {
-          await refreshSepayTransfer(payment._id, true);
+        // Nếu không có orderId, chỉ setup default method
+        if (!orderId) {
+          setExistingPayment(null);
+          setHasShownPaidAlert(false);
         }
       } catch (error) {
         if (!ignore) {
@@ -348,7 +339,7 @@ export default function Checkout() {
 
   useEffect(() => {
     if (existingPayment?._id && existingPayment?.status === 'paid' && !hasShownPaidAlert) {
-      setAlert({ type: 'success', message: 'Thanh toán thanh cong. He thong da cap nhat ket qua giao dich.' });
+      setAlert({ type: 'success', message: 'Thanh toán thành công! Hệ thống đã cập nhật kết quả giao dịch. Bạn có thể theo dõi đơn hàng trong lịch sử.' });
       setHasShownPaidAlert(true);
     }
   }, [existingPayment?._id, existingPayment?.status, hasShownPaidAlert]);
@@ -480,8 +471,8 @@ export default function Checkout() {
       }
 
       setAlert({
-        type: 'success',
-        message: 'Đã tạo thông tin chuyển khoản BIDV qua SePay. Hệ thống sẽ polling để cập nhật trạng thái.'
+        type: 'info',
+        message: 'Đã tạo thông tin chuyển khoản BIDV qua SePay. Vui lòng chuyển tiền theo thông tin bên dưới. Hệ thống sẽ tự động cập nhật khi nhận được thanh toán.'
       });
     } catch (error) {
       setAlert({ type: 'danger', message: getApiErrorMessage(error, 'Đặt hàng hoặc tạo thanh toán thất bại. Vui lòng thử lại.') });

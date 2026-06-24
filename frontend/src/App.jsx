@@ -43,6 +43,9 @@ export default function App() {
               <Route element={<ProtectedRoute role="admin" />}>
                 <Route path="/admin/products" element={<AdminProducts />} />
                 <Route path="/admin/users" element={<AdminUsers />} />
+              </Route>
+
+              <Route element={<ProtectedRoute role={["admin", "employee"]} />}>
                 <Route path="/admin/orders" element={<AdminOrders />} />
               </Route>
 

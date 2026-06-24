@@ -2,11 +2,12 @@ const Order = require("../models/Order");
 const mongoose = require("mongoose");
 const axios = require("axios");
 
-const ALLOWED_STATUSES = ["pending", "confirmed", "shipping", "completed", "cancelled"];
+const ALLOWED_STATUSES = ["pending", "confirmed", "paid", "shipping", "completed", "cancelled"];
 
 const STATUS_TRANSITIONS = {
-  pending: ["confirmed", "cancelled"],
-  confirmed: ["shipping", "cancelled"],
+  pending: ["confirmed", "paid", "cancelled"],
+  confirmed: ["paid", "shipping", "cancelled"],
+  paid: ["shipping", "cancelled"],
   shipping: ["completed"],
   completed: [],
   cancelled: []
@@ -37,7 +38,7 @@ const callStockApi = async (operation, items) => {
   return response.data;
 };
 
-const createOrder = async ({ user_id, items }, actorUserId) => {
+const createOrder = async ({ user_id, items }, actorUserId, customerInfo = {}) => {
   const ownerUserId = actorUserId || user_id;
   const stockItems = extractStockItems(items);
 
@@ -58,6 +59,8 @@ const createOrder = async ({ user_id, items }, actorUserId) => {
   try {
     const order = await Order.create({
       user_id: ownerUserId,
+      customer_name: customerInfo.customerName || "",
+      customer_email: customerInfo.customerEmail || "",
       items,
       total_price,
       status: "pending"
@@ -100,6 +103,7 @@ const getOrdersAdmin = async ({ status, q, page = 1, limit = 20 }) => {
   if (keyword) {
     const orFilters = [
       { user_id: { $regex: keyword, $options: "i" } },
+      { customer_name: { $regex: keyword, $options: "i" } },
       { "items.product_name": { $regex: keyword, $options: "i" } }
     ];
     if (mongoose.Types.ObjectId.isValid(keyword)) {
@@ -230,6 +234,54 @@ const deleteOrderAdmin = async (id) => {
   return { status: 200, body: { message: "Order deleted successfully" } };
 };
 
+const updateOrderStatus = async (id, newStatus, userId) => {
+  if (!userId) {
+    return { status: 401, body: { message: "Unauthorized" } };
+  }
+
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return { status: 400, body: { message: "Invalid order id" } };
+  }
+
+  const normalizedStatus = normalizeStatus(newStatus);
+  
+  // Only allow users to cancel their own orders (status must be pending or confirmed)
+  if (normalizedStatus !== "cancelled") {
+    return { status: 400, body: { message: "Users can only cancel orders" } };
+  }
+
+  const order = await Order.findById(id);
+  if (!order) {
+    return { status: 404, body: { message: "Order not found" } };
+  }
+
+  // Check if user is the owner
+  if (order.user_id !== userId) {
+    return { status: 403, body: { message: "Forbidden" } };
+  }
+
+  // Check if order can be cancelled (only pending or confirmed status)
+  const currentStatus = normalizeStatus(order.status);
+  if (!["pending", "confirmed", "paid"].includes(currentStatus)) {
+    return { status: 400, body: { message: `Cannot cancel order with status: ${currentStatus}` } };
+  }
+
+  // Update order status
+  const updated = await Order.findByIdAndUpdate(id, { status: "cancelled" }, { new: true, runValidators: true });
+  
+  // Try to release stock if order was not completed
+  const stockItems = extractStockItems(order.items);
+  if (stockItems.length > 0) {
+    try {
+      await callStockApi("increment", stockItems);
+    } catch (error) {
+      console.warn("Failed to release stock for cancelled order:", error.message);
+    }
+  }
+
+  return { status: 200, body: updated };
+};
+
 module.exports = {
   createOrder,
   getMyOrders,
@@ -238,5 +290,6 @@ module.exports = {
   getOrderByIdAdmin,
   updateOrderAdmin,
   deleteOrderAdmin,
+  updateOrderStatus,
   ALLOWED_STATUSES
 };

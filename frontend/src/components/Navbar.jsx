@@ -70,7 +70,10 @@ export default function Navbar() {
     }
 
     if (role === 'employee') {
-      items.push({ to: '/employee/support', label: 'Support Desk' });
+      items.push(
+        { to: '/admin/orders', label: 'Quản lý đơn hàng' },
+        { to: '/employee/support', label: 'Support Desk' }
+      );
     }
 
     items.push({ to: '/chatbot', label: 'Chatbot' });
